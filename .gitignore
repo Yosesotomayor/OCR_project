@@ -5,3 +5,5 @@ venv/
 .ipynb_checkpoints/
 data/
 *.log
+Dockerfile
+pyproject.toml

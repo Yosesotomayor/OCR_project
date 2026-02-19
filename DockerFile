@@ -2,14 +2,15 @@ FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
-    libgl1-mesa-glx \
-    openjdk-17-jre-headless \
+    libgl1 \
+    openjdk-21-jre-headless \
     procps \
     && rm -rf /var/lib/apt/lists/*
 
-ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64
-ENV JAVA_HOME=/usr/lib/jvm/default-java
+ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-arm64
+# ENV JAVA_HOME=/usr/lib/jvm/default-java
 
+COPY .env ./
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
@@ -18,7 +19,6 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project
 
 COPY . .
-
 RUN uv sync --frozen
 
 ENV PYSPARK_PYTHON=python3
