@@ -1,0 +1,13 @@
+[project]
+name = "ocr-project"
+version = "0.1.0"
+description = "A project for OCR processing"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pytest>=9.0.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["./"]
