@@ -1,0 +1,28 @@
+{
+    "name": "OCR & PySpark Dev Environment",
+    "build": {
+        "dockerfile": "../Dockerfile",
+        "context": ".."
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",        
+                "ms-python.vscode-pylint", 
+                "njpwerner.autodocstring", 
+                "tamasfe.even-better-toml", 
+                "ms-azuretools.vscode-docker"
+            ],
+            "settings": {
+                "python.defaultInterpreterPath": "/app/.venv/bin/python",
+                "python.testing.pytestEnabled": true,
+                "python.testing.pytestArgs": ["tests"]
+            }
+        }
+    },
+    "remoteUser": "root",
+    "mounts": [
+        "source=${localWorkspaceFolder},target=/app,type=bind"
+    ],
+    "postCreateCommand": "uv sync"
+}
