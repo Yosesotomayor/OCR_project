@@ -7,3 +7,11 @@ data/
 *.log
 Dockerfile
 pyproject.toml
+
+.vscode/
+.pytest_cache/
+.DS_Store
+.idea/
+.dockerignore
+.git/
+.gitignore
