@@ -1,19 +1,20 @@
+# Basura de Python
 __pycache__/
 *.py[cod]
-.env
+*$py.class
+.venv/
 venv/
+
+# Notebooks y Datos
 .ipynb_checkpoints/
 data/
 *.log
-Dockerfile
-pyproject.toml
 
+# Entorno y Secretos
+.env
+
+# IDEs y SO
 .vscode/
-.pytest_cache/
-.DS_Store
 .idea/
-.dockerignore
-.git/
-.gitignore
-
-uv.lock
+.DS_Store
+.pytest_cache/
