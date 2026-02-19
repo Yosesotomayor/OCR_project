@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 .venv/
 venv/
+.ipynb_checkpoints/
 
 # Notebooks y Datos
 .ipynb_checkpoints/
@@ -18,3 +19,9 @@ data/
 .idea/
 .DS_Store
 .pytest_cache/
+
+# Drivers
+drivers/
+
+# Actions
+.github/workflows/ci.yml
