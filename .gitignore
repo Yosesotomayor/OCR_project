@@ -15,3 +15,5 @@ pyproject.toml
 .dockerignore
 .git/
 .gitignore
+
+uv.lock
