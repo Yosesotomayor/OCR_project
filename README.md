@@ -1,4 +1,3 @@
-
 # OCR & Data Pipeline Project
 
 Este proyecto implementa un pipeline de procesamiento de imágenes (OCR) integrado con **PySpark** para la estructuración de datos a gran escala. Diseñado bajo principios de MLOps, utilizando contenedores para garantizar la reproducibilidad.
@@ -28,6 +27,7 @@ OCR_project/
 
 * Tener instalado [Docker](https://www.docker.com/).
 * (Opcional) [uv](https://github.com/astral-sh/uv) para desarrollo local sin Docker.
+* Dev container (extension vscode)
 
 ### 1. Clonar y Construir
 
