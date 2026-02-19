@@ -71,3 +71,5 @@ make test
 
 * Si agregas una dependencia, hazlo mediante `uv add <paquete>` para mantener el `uv.lock` actualizado.
 * Los archivos pesados de imágenes de prueba deben ir en la carpeta `data/` (ignorada por Git) o referenciarse desde un bucket de S3/Blob Storage.
+* git checkout -b feature/agregar-db
+* git push origin feature/agregar-db
