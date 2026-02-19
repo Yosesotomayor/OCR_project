@@ -1,28 +1,16 @@
 {
-    "name": "OCR & PySpark Dev Environment",
-    "build": {
-        "dockerfile": "../Dockerfile",
-        "context": ".."
-    },
+    "name": "OCR & Spark Ecosystem",
+    "dockerComposeFile": "../docker-compose.yml",
+    "service": "app",
+    "workspaceFolder": "/app",
     "customizations": {
         "vscode": {
             "extensions": [
-                "ms-python.python",        
-                "ms-python.vscode-pylint", 
-                "njpwerner.autodocstring", 
-                "tamasfe.even-better-toml", 
-                "ms-azuretools.vscode-docker"
-            ],
-            "settings": {
-                "python.defaultInterpreterPath": "/app/.venv/bin/python",
-                "python.testing.pytestEnabled": true,
-                "python.testing.pytestArgs": ["tests"]
-            }
+                "ms-python.python",
+                "ckdtw.vscode-postgres" 
+            ]
         }
     },
-    "remoteUser": "root",
-    "mounts": [
-        "source=${localWorkspaceFolder},target=/app,type=bind"
-    ],
+    "forwardPorts": [4040, 5432],
     "postCreateCommand": "uv sync"
 }

@@ -5,6 +5,7 @@ description = "A project for OCR processing"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "psycopg2-binary>=2.9.11",
     "pyspark>=4.1.1",
     "pytest>=9.0.2",
 ]
