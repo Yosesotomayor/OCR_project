@@ -1,56 +1,42 @@
 services:
-  spark_driver:
-    image: bitnami/spark:latest
-    environment:
-      - SPARK_MODE=driver
-      - SPARK_MASTER_URL=spark://spark_master:7077
+  app:
+    build: .
     volumes:
       - .:/app
+      - ./storage:/app/storage # Aquí vivirán los PDFs e imágenes
     working_dir: /app
     ports:
-      - "4040:4040" # UI de Spark
+      - "8000:8000"
+    env_file: .env
     depends_on:
-      - spark_master
-      - db
+      postgresdb:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
 
-  spark_master:
-    image: bitnami/spark:latest
-    environment:
-      - SPARK_MODE=master
-    ports:
-      - "7077:7077"
-      - "8080:8080" # UI del master
-
-  spark_worker:
-    image: bitnami/spark:latest
-    environment:
-      - SPARK_MODE=worker
-      - SPARK_MASTER_URL=spark://spark_master:7077
-    depends_on:
-      - spark_master
-
-  vector-db:
-    image: mongo:latest
+  chromadb:
+    image: chromadb/chromadb:latest
     restart: always
-    ports:
-      - "27017:27017"
     volumes:
-      - mongo-data:/data/db
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
-      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE}
+      - chroma_data:/chroma/data
+    ports:
+      - "8008:8000"
 
-  db:
+  postgresdb:
     image: postgres:latest
     restart: always
-    ports:
-      - "5432:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
-  mongo-data:
-    driver: local
+  postgres_data:
+  chroma_data:
