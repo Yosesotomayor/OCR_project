@@ -8,7 +8,6 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-arm64
-# ENV JAVA_HOME=/usr/lib/jvm/default-java
 
 COPY .env ./
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/

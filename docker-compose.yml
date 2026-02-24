@@ -1,35 +1,56 @@
 services:
-  app:
-    command: sleep infinity
-    build: .
-    env_file: .env 
+  spark_driver:
+    image: bitnami/spark:latest
+    environment:
+      - SPARK_MODE=driver
+      - SPARK_MASTER_URL=spark://spark_master:7077
     volumes:
       - .:/app
+    working_dir: /app
     ports:
-      - "4040:4040"
+      - "4040:4040" # UI de Spark
     depends_on:
+      - spark_master
       - db
 
-  db:
-    image: postgres
-    restart: always
+  spark_master:
+    image: bitnami/spark:latest
     environment:
-      - POSTGRES_USER=${DB_USER}
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-      - POSTGRES_DB=${DB_NAME}
+      - SPARK_MODE=master
     ports:
-      - ${DB_PORT}:5432
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-  dbadmin:
-    image: dpage/pgadmin4
-    restart: always
+      - "7077:7077"
+      - "8080:8080" # UI del master
+
+  spark_worker:
+    image: bitnami/spark:latest
     environment:
-      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL}
-      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD}
-    ports:
-      - ${PGADMIN_PORT}:80
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark_master:7077
     depends_on:
-      - db
+      - spark_master
+
+  vector-db:
+    image: mongo:latest
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE}
+
+  db:
+    image: postgres:latest
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+
 volumes:
-  pgdata:
+  mongo-data:
+    driver: local

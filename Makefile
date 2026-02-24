@@ -12,7 +12,6 @@ dev:
 		-v $(PWD):/app \
 		$(IMAGE_NAME) /bin/bash
 
-
 test:
 	docker run --rm $(IMAGE_NAME) uv run pytest
 
