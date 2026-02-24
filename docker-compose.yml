@@ -1,8 +1,8 @@
 services:
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
     ports:
       - "80:80"
     networks:
@@ -12,8 +12,8 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresdb:5432/${POSTGRES_DB}
       - ML_SERVICE_URL=http://ml-service:8001
@@ -32,8 +32,8 @@ services:
 
   ml-service:
     build:
-      context: ./ml-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ml-service/Dockerfile
     environment:
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000

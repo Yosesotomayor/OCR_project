@@ -1,4 +1,9 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
+
+RUN sed -i 's/deb.debian.org/ftp.us.debian.org/g' /etc/apt/sources.list.d/debian.sources || \
+    sed -i 's/deb.debian.org/ftp.us.debian.org/g' /etc/apt/sources.list
+
+LABEL name="OCR Project - Backend"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev gcc && \
@@ -17,4 +22,4 @@ ENV PYTHONUNBUFFERED=1
 ENV PATH="/app/.venv/bin:$PATH"
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
