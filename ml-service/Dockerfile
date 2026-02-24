@@ -1,7 +1,4 @@
 FROM python:3.11-slim-bookworm
-RUN sed -i 's/deb.debian.org/ftp.us.debian.org/g' /etc/apt/sources.list.d/debian.sources || \
-    sed -i 's/deb.debian.org/ftp.us.debian.org/g' /etc/apt/sources.list
-
 LABEL name="OCR Project - ML Service"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -20,11 +17,11 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-cache --no-install-project
 
-COPY . .
+COPY ml-service ./ml-service
 RUN uv sync --frozen --no-cache
 
 ENV PYTHONUNBUFFERED=1
 ENV PATH="/app/.venv/bin:$PATH"
 
 EXPOSE 8001 
-CMD ["uv", "run", "python", "ml_service/main.py"]
+CMD ["uv", "run", "python", "main.py"]

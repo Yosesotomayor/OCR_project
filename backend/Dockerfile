@@ -1,8 +1,4 @@
 FROM python:3.11-slim-bookworm
-
-RUN sed -i 's/deb.debian.org/ftp.us.debian.org/g' /etc/apt/sources.list.d/debian.sources || \
-    sed -i 's/deb.debian.org/ftp.us.debian.org/g' /etc/apt/sources.list
-
 LABEL name="OCR Project - Backend"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -15,7 +11,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-cache --no-install-project
 
-COPY . .
+COPY backend ./backend
 RUN uv sync --frozen --no-cache
 
 ENV PYTHONUNBUFFERED=1

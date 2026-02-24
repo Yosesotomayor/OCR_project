@@ -3,8 +3,9 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+    image: ocr-project-frontend
     ports:
-      - "80:80"
+      - "8501:8501"
     networks:
       - frontend-net
     depends_on:
@@ -14,6 +15,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    image: ocr-project-backend
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresdb:5432/${POSTGRES_DB}
       - ML_SERVICE_URL=http://ml-service:8001
@@ -34,6 +36,7 @@ services:
     build:
       context: .
       dockerfile: ml-service/Dockerfile
+    image: ocr-project-ml-service
     environment:
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
@@ -57,7 +60,7 @@ services:
       - backend-net
 
   postgresdb:
-    image: postgres:latest
+    image: postgres:17-bookworm
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
