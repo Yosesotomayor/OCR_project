@@ -1,26 +1,60 @@
 services:
-  app:
-    build: .
-    volumes:
-      - .:/app
-      - ./storage:/app/storage # Aquí vivirán los PDFs e imágenes
-    working_dir: /app
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     ports:
-      - "8000:8000"
-    env_file: .env
+      - "80:80"
+    networks:
+      - frontend-net
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresdb:5432/${POSTGRES_DB}
+      - ML_SERVICE_URL=http://ml-service:8001
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+    volumes:
+      - ./storage:/app/storage 
+    networks:
+      - frontend-net
+      - backend-net
     depends_on:
       postgresdb:
         condition: service_healthy
       chromadb:
         condition: service_started
 
+  ml-service:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    environment:
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresdb:5432/${POSTGRES_DB}
+    volumes:
+      - ./storage:/app/storage
+    networks:
+      - backend-net
+    depends_on:
+      - chromadb
+      - postgresdb
+
   chromadb:
-    image: chromadb/chromadb:latest
+    image: chromadb/chroma:latest
     restart: always
     volumes:
       - chroma_data:/chroma/data
     ports:
       - "8008:8000"
+    networks:
+      - backend-net
 
   postgresdb:
     image: postgres:latest
@@ -31,11 +65,17 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend-net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
+
+networks:
+  frontend-net:
+  backend-net:
 
 volumes:
   postgres_data:

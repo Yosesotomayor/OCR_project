@@ -22,7 +22,7 @@ A specialized system for processing lease contracts. It utilizes OCR for text ex
 ### 3. ML Service (RAG & LLM)
 
 - **Technology:** Python, LangChain, OCR (Tesseract/PaddleOCR).
-- **Vector Database (MongoDB):** MongoDB Atlas Vector Search for storing and retrieving contract embeddings.
+- **Vector Database (ChromaDB):** For storing and retrieving contract embeddings.
 - **LangChain Usage:**
   - **Document Loaders:** For parsing OCR-extracted text and PDF structures.
   - **Text Splitters:** Recursive character splitting optimized for legal clauses.

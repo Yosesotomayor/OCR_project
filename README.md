@@ -1,75 +1,29 @@
-# OCR & Data Pipeline Project
+## System Architecture
 
-Este proyecto implementa un pipeline de procesamiento de imágenes (OCR) integrado con **PySpark** para la estructuración de datos a gran escala. Diseñado bajo principios de MLOps, utilizando contenedores para garantizar la reproducibilidad.
+El sistema está diseñado bajo una arquitectura de  **microservicios contenedorizados** , priorizando la separación de responsabilidades, la seguridad de red y la eficiencia en el procesamiento de datos no estructurados.
 
-## Stack Tecnológico
+### 1. Componentes del Sistema
 
-* **Lenguaje:** Python 3.11
-* **Gestor de Dependencias:** [uv](https://github.com/astral-sh/uv)
-* **Procesamiento:** PySpark (Spark 3.5.x)
-* **OCR:** Tesseract / EasyOCR
-* **Infraestructura:** Docker (Debian Slim + OpenJDK 21)
-* **Calidad:** Pytest
+* **Frontend (React + Vite):** Interfaz de usuario optimizada para la carga de documentos y consultas de lenguaje natural. Se sirve mediante un servidor Nginx en una etapa de producción.
+* **Backend Orchestrator (FastAPI):** Actúa como el cerebro del sistema. Maneja la autenticación, la gestión de metadatos en **PostgreSQL** y la orquestación de tareas entre el usuario y el servicio de ML.
+* **ML Service (OCR & RAG Engine):** Nodo de computación pesada especializado en:
+  * **OCR Pipeline:** Extracción de texto mediante Tesseract con soporte para idioma español.
+  * **RAG Pipeline:** Procesamiento de texto (chunking) y generación de embeddings con LangChain.
+* **Data Layer:**
+  * **PostgreSQL:** Persistencia de datos relacionales (usuarios, estados de documentos, auditoría).
+  * **ChromaDB:** Base de datos vectorial para el almacenamiento de embeddings y búsqueda semántica de alta velocidad.
 
-## Estructura del Proyecto
+### 2. Flujo de Procesamiento de Datos
 
-```text
-OCR_project/
-├── src/                # Lógica central del negocio
-│   └── func.py         # Funciones de transformación y OCR
-├── tests/              # Pruebas unitarias y de integración
-├── pyproject.toml      # Configuración central (PEP 621)
-├── Makefile            # Atajos de comandos de ingeniería
-└── Dockerfile          # Entorno reproducible
-```
+1. **Ingesta:** El usuario carga un contrato (PDF/JPG) desde el Frontend.
+2. **Persistencia Binaria:** El Backend recibe el archivo y lo almacena en un **volumen compartido** (`/storage`).
+3. **Registro de Metadatos:** Se crea una entrada en PostgreSQL con el estado `PENDING`.
+4. **Procesamiento Asíncrono:** El ML Service detecta el nuevo archivo (o es notificado por el Backend), realiza el OCR, fragmenta el texto y genera los vectores.
+5. **Indexación:** Los vectores se inyectan en ChromaDB con metadatos que apuntan al ID del documento en Postgres.
+6. **Disponibilidad:** El estado cambia a `READY` y el usuario puede realizar consultas sobre el contrato.
 
-### REQUISITOS
+### 3. Infraestructura y Seguridad
 
-* Tener instalado [Docker](https://www.docker.com/).
-* (Opcional) [uv](https://github.com/astral-sh/uv) para desarrollo local sin Docker.
-* Dev container (extension vscode)
-
-### 1. Clonar y Construir
-
-Primero, clona el repositorio y construye la imagen base. Esto instalará automáticamente Java 21, Tesseract y todas las librerías de Python.
-
-**Bash**
-
-```
-git clone [https://github.com/tu-usuario/OCR_project.git](https://github.com/tu-usuario/OCR_project.git)
-cd OCR_project
-make build
-```
-
-### 2. Entorno de Desarrollo
-
-Para trabajar dentro del contenedor con acceso a tus archivos locales (modo live-reload):
-
-**Bash**
-
-```
-make dev
-```
-
-### 3. Ejecutar Pruebas
-
-Garantiza que la lógica de Spark y OCR sea correcta antes de realizar un commit:
-
-**Bash**
-
-```
-make test
-```
-
-## Prácticas de Ingeniería (MLOps)
-
-* **Ramas:** No se permite hacer push directo a `main`. Todo cambio debe venir de una rama `feature/` o `fix/`.
-* **CI/CD:** Cada Pull Request activa un workflow de GitHub Actions que valida los tests en el entorno Docker.
-* **Tests:** Los tests de Spark utilizan una `SparkSession` local efímera. Asegúrate de usar el patrón  **Arrange-Act-Assert** .
-
-## Notas para el Equipo
-
-* Si agregas una dependencia, hazlo mediante `uv add <paquete>` para mantener el `uv.lock` actualizado.
-* Los archivos pesados de imágenes de prueba deben ir en la carpeta `data/` (ignorada por Git) o referenciarse desde un bucket de S3/Blob Storage.
-* git checkout -b feature/agregar-db
-* git push origin feature/agregar-db
+* **Network Isolation:** Se implementaron dos redes virtuales (`frontend-net` y `backend-net`). El Frontend no tiene visibilidad directa de las bases de datos ni del motor de ML, reduciendo la superficie de ataque.
+* **Shared Volume Strategy:** Para evitar el overhead de red al transferir archivos binarios pesados entre servicios, se utiliza un volumen bindeado (`bind mount`) que permite acceso directo al disco desde los contenedores de Backend y ML.
+* **Healthchecks:** El sistema garantiza la disponibilidad mediante controles de salud que retrasan el inicio de la aplicación hasta que PostgreSQL y ChromaDB estén plenamente operativos.
