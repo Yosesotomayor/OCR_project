@@ -1,3 +1,5 @@
+from shared_schemas.schemas import BaseModel
+
 def main():
     print("Hello from ml-service!")
 
