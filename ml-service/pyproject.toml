@@ -4,17 +4,11 @@ version = "0.1.0"
 description = "A project for OCR processing"
 requires-python = ">=3.11"
 dependencies = [
+    "easyocr>=1.7.2",
+    "fastapi>=0.133.0",
     "ipykernel>=7.2.0",
     "numpy>=2.4.2",
-    "opencv-python-headless>=4.13.0.92",
-    "pillow>=12.1.1",
-    "psycopg2-binary>=2.9.11",
-    "pyspark>=4.1.1",
-    "pytesseract>=0.3.13",
-    "pytest>=9.0.2",
-    "shared-schemas",
-    "streamlit>=1.54.0",
-    "uvicorn>=0.41.0",
+    "shared-schemas>=0.1.0",
 ]
 
 [tool.pytest.ini_options]
