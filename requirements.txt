@@ -1,7 +1,0 @@
-iniconfig==2.3.0
-packaging==26.0
-pluggy==1.6.0
-py4j==0.10.9.9
-pygments==2.19.2
-pyspark==4.1.1
-pytest==9.0.2
