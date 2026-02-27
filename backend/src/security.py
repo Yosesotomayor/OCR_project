@@ -7,10 +7,10 @@ import os
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
-from .models import User # Moved User import to the top
-from .infrastructure.database import get_db # Moved get_db import to the top
+from .models import User
+from .infrastructure.database import get_db
 
-# Internal API Key for ML-Service
+
 API_KEY = os.getenv("INTERNAL_API_KEY", "super-secret-key-123")
 api_key_header = APIKeyHeader(name="X-Internal-Token", auto_error=True)
 

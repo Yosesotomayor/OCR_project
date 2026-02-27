@@ -12,7 +12,6 @@ RUN pip install uv
 
 WORKDIR /app
 
-
 COPY backend/pyproject.toml backend/uv.lock ./
 
 RUN uv sync --frozen --no-cache --no-install-project

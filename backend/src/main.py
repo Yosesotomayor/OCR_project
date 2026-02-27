@@ -6,8 +6,8 @@ import httpx, uuid, json
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional, Annotated
 from sqlalchemy import func
-from decimal import Decimal
-from fastapi.security import OAuth2PasswordRequestForm # Added this import
+from datetime import timedelta
+from fastapi.security import OAuth2PasswordRequestForm 
 
 from .infrastructure.database import engine, Base, get_db
 from .infrastructure.s3_manager import S3Manager
@@ -21,7 +21,7 @@ from .security import (
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
 from .utils import extract_json_from_text, safe_decimal
-from .models import Contract, User # Import User model
+from .models import Contract, User
 
 app = FastAPI(title="LeaseLens API Gateway")
 
@@ -33,6 +33,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 s3 = S3Manager()
 ML_SERVICE_URL = "http://ml-service:8000"
 
@@ -42,7 +43,6 @@ class ChatRequest(BaseModel):
     question: str
     history: Optional[List[dict]] = []
 
-# Pydantic models for User authentication
 class UserBase(BaseModel):
     email: EmailStr
 
@@ -61,7 +61,6 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
-# --- User Authentication Endpoints ---
 @app.post("/register", response_model=UserResponse)
 async def register_user(user: UserCreate, db: Session = Depends(get_db)):
     if not user.email.endswith("@vertiche.mx"):
@@ -77,7 +76,6 @@ async def register_user(user: UserCreate, db: Session = Depends(get_db)):
     hashed_password = get_password_hash(user.password)
     new_user = User(id=str(uuid.uuid4()), email=user.email, hashed_password=hashed_password)
     
-    # Make the first registered user an admin
     if db.query(User).count() == 0:
         new_user.is_admin = True
 

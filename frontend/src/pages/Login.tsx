@@ -3,6 +3,7 @@ import AuthLayout from '../layouts/AuthLayout';
 import { Zap, ShieldCheck, AlertCircle, Eye, EyeOff } from 'lucide-react'; // Import Eye and EyeOff
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
+import { useAuth } from '../hooks/useAuth'; // Import useAuth
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -14,6 +15,7 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false); // New state for password visibility
   const navigate = useNavigate();
+  const { login } = useAuth(); // Destructure login from useAuth
 
   const validateEmail = (inputEmail: string) => {
     if (!inputEmail.endsWith('@vertiche.mx')) {
@@ -40,31 +42,11 @@ export default function Login() {
 
     setIsLoading(true);
     try {
-      const formData = new URLSearchParams();
-      formData.append('username', email);
-      formData.append('password', password);
-
-      const response = await fetch(`${API_URL}/token`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: formData.toString(),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        setLoginError(errorData.detail || 'Error de autenticación');
-        return;
-      }
-
-      const data = await response.json();
-      localStorage.setItem('access_token', data.access_token);
+      await login(email, password);
       navigate('/dashboard'); // Redirect to dashboard on successful login
-
-    } catch (error) {
-      console.error('Error de red o servidor:', error);
-      setLoginError('No se pudo conectar con el servidor. Intenta de nuevo.');
+    } catch (error: any) {
+      console.error('Error de autenticación:', error.message);
+      setLoginError(error.message || 'Error de autenticación');
     } finally {
       setIsLoading(false);
     }

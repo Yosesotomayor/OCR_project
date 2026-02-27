@@ -164,8 +164,8 @@ services:
       exit 0;"
 
   seed_admin_user:
-    image: lease-lens-backend # Use the backend image
-    command: ["uv", "run", "python", "src/create_default_admin.py"]
+    image: lease-lens-backend 
+    command: ["uv", "run", "python", "-m", "src.create_default_admin"]
     networks:
       - backend-net
     depends_on:
@@ -175,7 +175,6 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresdb:5432/${POSTGRES_DB}
       - DEFAULT_ADMIN_EMAIL=${DEFAULT_ADMIN_EMAIL}
       - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD}
-    # This service should run and exit
     restart: "no" 
 
   pgadmin:
