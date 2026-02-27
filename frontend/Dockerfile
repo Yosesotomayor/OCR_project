@@ -1,19 +1,20 @@
-FROM python:3.11-slim-bookworm
-LABEL name="OCR Project - Frontend"
-
-RUN pip install uv
+FROM node:20-slim AS build
+LABEL name="OCR Project - Frontend React"
 
 WORKDIR /app
 
-COPY frontend/pyproject.toml frontend/uv.lock ./
-RUN uv sync --frozen --no-cache --no-install-project
+COPY frontend/package.json frontend/package-lock.json* ./
 
-COPY frontend .
-RUN uv sync --frozen --no-cache
+RUN npm ci
 
-EXPOSE 8501
+COPY frontend/ .
 
-ENV PATH="/app/.venv/bin:$PATH"
+RUN npm run build
 
+FROM nginx:stable-alpine
 
-ENTRYPOINT ["uv", "run", "python", "-m", "streamlit", "run", "src/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+COPY --from=build /app/dist /usr/share/nginx/html
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

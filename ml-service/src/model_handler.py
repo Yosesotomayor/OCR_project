@@ -14,8 +14,6 @@ class EasyOCRModel:
     def predict(cls, file_path: str):
         reader = cls()
         start_time = time.time()
-        
-        # Inferencia
         results = reader.readtext(file_path)
         
         processed_results = [
