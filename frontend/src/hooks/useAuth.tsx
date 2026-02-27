@@ -40,6 +40,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       if (response.ok) {
         const userData: User = await response.json();
+        console.log("Fetched user data:", userData); // Add this line
         setUser(userData);
       } else {
         // Token might be invalid or expired
