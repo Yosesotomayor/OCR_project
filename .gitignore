@@ -1,27 +1,65 @@
-# Basura de Python
+# --- General / OS ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+*.swp
+
+# --- Environment Variables (CRÍTICO) ---
+.env
+.env.*
+!.env.example
+
+# --- Python (Backend & ML Service) ---
 __pycache__/
 *.py[cod]
 *$py.class
 .venv/
+env/
+**venv/**
 venv/
-.ipynb_checkpoints/
-
-# Notebooks y Datos
-.ipynb_checkpoints/
-data/
-*.log
-
-# Entorno y Secretos
-.env
-
-# IDEs y SO
-.vscode/
-.idea/
-.DS_Store
+**venv/
+.python-version
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Drivers
-drivers/
+# Dependencias de 'uv' y archivos de compilación
+.uv/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Actions
-.github/workflows/ci.yml
+# --- Node.js / React (Frontend) ---
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.eslintcache
+frontend/coverage/
+
+# --- Docker & Databases ---
+postgres_data/
+chroma_data/
+storage/
+**/data/
+
+# --- ML Models ---
+
+models/
+*.pth
+*.onnx
+*.bin
