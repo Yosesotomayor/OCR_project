@@ -163,6 +163,38 @@ services:
       /usr/bin/mc policy set public local/artifacts;
       exit 0;"
 
+  seed_admin_user:
+    image: lease-lens-backend # Use the backend image
+    command: ["uv", "run", "python", "src/create_default_admin.py"]
+    networks:
+      - backend-net
+    depends_on:
+      postgresdb:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresdb:5432/${POSTGRES_DB}
+      - DEFAULT_ADMIN_EMAIL=${DEFAULT_ADMIN_EMAIL}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD}
+    # This service should run and exit
+    restart: "no" 
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: lease-lens-pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "8080:80" 
+    networks:
+      - backend-net
+    depends_on:
+      - postgresdb
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
 networks:
   frontend-net:
   backend-net:
@@ -171,3 +203,4 @@ volumes:
   postgres_data:
   chroma_data:
   minio_data:
+  pgadmin_data:

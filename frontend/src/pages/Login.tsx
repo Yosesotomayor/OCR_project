@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import AuthLayout from '../layouts/AuthLayout';
-import { Zap, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Zap, ShieldCheck, AlertCircle, Eye, EyeOff } from 'lucide-react'; // Import Eye and EyeOff
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
 
@@ -12,6 +12,7 @@ export default function Login() {
   const [emailError, setEmailError] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false); // New state for password visibility
   const navigate = useNavigate();
 
   const validateEmail = (inputEmail: string) => {
@@ -113,13 +114,22 @@ export default function Login() {
             <label className="text-[10px] font-black text-gray-600 uppercase tracking-widest">Código de Acceso</label>
             <a href="#" className="text-[9px] text-accent-electric/50 hover:text-accent-electric transition-colors uppercase font-black">Recuperar</a>
           </div>
-          <input 
-            type="password" 
-            placeholder="••••••••••••"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-5 py-4 text-white focus:outline-none focus:border-accent-electric/50 focus:ring-1 focus:ring-accent-electric/20 transition-all placeholder:text-gray-800 text-sm"
-          />
+          <div className="relative"> {/* Added relative div for positioning */}
+            <input 
+              type={showPassword ? 'text' : 'password'} // Toggle type
+              placeholder="••••••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-5 py-4 text-white focus:outline-none focus:border-accent-electric/50 focus:ring-1 focus:ring-accent-electric/20 transition-all placeholder:text-gray-800 text-sm pr-12" // Added pr-12 for button space
+            />
+            <button
+              type="button" // Important: prevent form submission
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-white transition-colors"
+            >
+              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+            </button>
+          </div>
         </div>
         
         {loginError && (
