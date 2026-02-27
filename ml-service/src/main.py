@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from shared_schemas.schemas import OCRRequest, OCRResponse
-from .model_handler import EasyOCRModel
+from model_handler import EasyOCRModel
 import os
 
 app = FastAPI(title="ML Service - EasyOCR")

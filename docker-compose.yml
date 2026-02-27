@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      network: host
     image: ocr-project-frontend
     ports:
       - "8501:8501"
@@ -15,6 +16,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      network: host
     image: ocr-project-backend
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresdb:5432/${POSTGRES_DB}
@@ -32,10 +34,12 @@ services:
       chromadb:
         condition: service_started
 
+
   ml-service:
     build:
       context: .
       dockerfile: ml-service/Dockerfile
+      network: host
     image: ocr-project-ml-service
     environment:
       - CHROMA_HOST=chromadb
@@ -48,6 +52,7 @@ services:
     depends_on:
       - chromadb
       - postgresdb
+      
 
   chromadb:
     image: chromadb/chroma:latest

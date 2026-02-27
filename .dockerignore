@@ -1,11 +1,21 @@
-__pycache__/
-*.py[cod]
-venv/
+# Ignorar TODO lo que huela a entorno virtual en cualquier nivel
+**/*venv*/
+**/env/
+**/venv/
 .venv/
-.ipynb_checkpoints/
-data/
-*.log
-.git
-.DS_Store
-.vscode/
 
+# Ignorar datos y modelos pesados que NO deben ir en la imagen
+**/storage/
+**/models/
+**/*.pkl
+**/*.bin
+**/*.pth
+**/*.onnx
+
+# Basura de sistema y archivos locales
+.git/
+.DS_Store
+**/.DS_Store
+.idea/
+.vscode/
+**/__pycache__/
