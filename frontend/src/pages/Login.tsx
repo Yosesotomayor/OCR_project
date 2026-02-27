@@ -1,7 +1,74 @@
+import { useState } from 'react';
 import AuthLayout from '../layouts/AuthLayout';
-import { Zap, ShieldCheck } from 'lucide-react';
+import { Zap, ShieldCheck, AlertCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { cn } from '../lib/utils';
+
+const API_URL = import.meta.env.VITE_API_URL;
 
 export default function Login() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
+
+  const validateEmail = (inputEmail: string) => {
+    if (!inputEmail.endsWith('@vertiche.mx')) {
+      setEmailError('El correo debe ser de dominio @vertiche.mx');
+      return false;
+    }
+    setEmailError('');
+    return true;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    setEmailError('');
+
+    if (!validateEmail(email)) {
+      return;
+    }
+
+    if (!password) {
+      setLoginError('Por favor, ingresa tu contraseña.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const formData = new URLSearchParams();
+      formData.append('username', email);
+      formData.append('password', password);
+
+      const response = await fetch(`${API_URL}/token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formData.toString(),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        setLoginError(errorData.detail || 'Error de autenticación');
+        return;
+      }
+
+      const data = await response.json();
+      localStorage.setItem('access_token', data.access_token);
+      navigate('/dashboard'); // Redirect to dashboard on successful login
+
+    } catch (error) {
+      console.error('Error de red o servidor:', error);
+      setLoginError('No se pudo conectar con el servidor. Intenta de nuevo.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <AuthLayout>
       <div className="text-center mb-12">
@@ -17,14 +84,28 @@ export default function Login() {
         </div>
       </div>
       
-      <form className="space-y-8">
+      <form className="space-y-8" onSubmit={handleSubmit}>
         <div className="space-y-2">
           <label className="text-[10px] font-black text-gray-600 uppercase tracking-widest ml-1">Protocolo de Identidad</label>
           <input 
             type="email" 
-            placeholder="USUARIO@LEASELENS.AI"
-            className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-5 py-4 text-white focus:outline-none focus:border-accent-electric/50 focus:ring-1 focus:ring-accent-electric/20 transition-all placeholder:text-gray-800 text-sm font-bold tracking-tight uppercase"
+            placeholder="USUARIO@VERTICHE.MX"
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              validateEmail(e.target.value);
+            }}
+            onBlur={(e) => validateEmail(e.target.value)}
+            className={cn(
+              "w-full bg-[#0a0a0a] border rounded-xl px-5 py-4 text-white focus:outline-none focus:border-accent-electric/50 focus:ring-1 focus:ring-accent-electric/20 transition-all placeholder:text-gray-800 text-sm font-bold tracking-tight uppercase",
+              emailError ? "border-red-500" : "border-[#1f1f1f]"
+            )}
           />
+          {emailError && (
+            <p className="text-red-500 text-xs flex items-center gap-1 ml-1">
+              <AlertCircle size={12} /> {emailError}
+            </p>
+          )}
         </div>
         
         <div className="space-y-2">
@@ -35,12 +116,27 @@ export default function Login() {
           <input 
             type="password" 
             placeholder="••••••••••••"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-5 py-4 text-white focus:outline-none focus:border-accent-electric/50 focus:ring-1 focus:ring-accent-electric/20 transition-all placeholder:text-gray-800 text-sm"
           />
         </div>
         
-        <button className="w-full bg-accent-electric hover:bg-accent-electric-hover text-white font-black py-5 rounded-xl mt-6 transition-all shadow-[0_0_30px_rgba(168,85,247,0.2)] active:scale-[0.98] uppercase tracking-[0.2em] text-xs">
-          Autenticar Sesión
+        {loginError && (
+          <p className="text-red-500 text-sm text-center flex items-center justify-center gap-1">
+            <AlertCircle size={16} /> {loginError}
+          </p>
+        )}
+
+        <button 
+          type="submit"
+          disabled={isLoading}
+          className={cn(
+            "w-full bg-accent-electric hover:bg-accent-electric-hover text-black font-black py-5 rounded-xl mt-6 transition-all shadow-[0_0_30px_rgba(168,85,247,0.2)] active:scale-[0.98] uppercase tracking-[0.2em] text-xs",
+            isLoading && "opacity-50 cursor-not-allowed"
+          )}
+        >
+          {isLoading ? 'Autenticando...' : 'Autenticar Sesión'}
         </button>
         
         <p className="text-center text-gray-700 text-[10px] mt-10 font-bold uppercase tracking-widest">

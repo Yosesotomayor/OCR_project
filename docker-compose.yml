@@ -3,7 +3,10 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-    image: ocr-project-frontend
+      args:
+        # IMPORTANTE: Cambia localhost por tu IP si vas a probarlo desde otro dispositivo
+        - VITE_API_URL=http://localhost:8000
+    image: lease-lens-frontend
     ports:
       - "80:80"
     networks:
@@ -15,54 +18,82 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-      network: host
-    image: ocr-project-backend
+    image: lease-lens-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresdb:5432/${POSTGRES_DB}
-      - ML_SERVICE_URL=http://ml-service:8001
-      - CHROMA_HOST=chromadb
-      - CHROMA_PORT=8000
+      - ML_SERVICE_URL=http://ml-service:8000
       - MINIO_ENDPOINT=http://minio:9000
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
       - MINIO_BUCKET=artifacts
-    volumes:
-      - ./storage:/app/storage 
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
     networks:
       - frontend-net
       - backend-net
     depends_on:
       postgresdb:
         condition: service_healthy
-      chromadb:
+      minio:
+        condition: service_started
+      ml-service:
         condition: service_started
 
   ml-service:
     build:
       context: .
       dockerfile: ml-service/Dockerfile
-      network: host
-    image: ocr-project-ml-service
+    image: lease-lens-ml-service
     environment:
+      - PYTHONPATH=/app
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresdb:5432/${POSTGRES_DB}
-    volumes:
-      - ./storage:/app/storage
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - MINIO_BUCKET=artifacts
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
+      - BACKEND_INTERNAL_URL=http://backend:8000
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     networks:
       - backend-net
     depends_on:
       - chromadb
-      - postgresdb
-      
+      - ollama
+    env_file:
+      - .env
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: always
+    volumes:
+      - ./ollama_storage:/root/.ollama
+    networks:
+      - backend-net
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
   chromadb:
     image: chromadb/chroma:latest
     restart: always
     volumes:
       - chroma_data:/chroma/data
-    ports:
-      - "8008:8000"
     networks:
       - backend-net
 
@@ -77,33 +108,39 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - backend-net
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  pgadmin:
-    image: dpage/pgadmin4
-    restart: always
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@admin.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
-    ports:
-      - "5050:80"
+  ollama-pull-models:
+    image: curlimages/curl:latest
+    container_name: ollama-pull-models
     networks:
       - backend-net
     depends_on:
-      - postgresdb
+      ollama:
+        condition: service_started
+    entrypoint: [ "/bin/sh", "-c" ]
+    command: >
+      "
+      echo 'Esperando a que Ollama responda...';
+      until curl -s http://ollama:11434/api/tags > /dev/null; do
+        sleep 5;
+      done;
+      echo 'Descargando Llama 3.1:8b...';
+      curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"llama3.1:8b\"}';
+      echo 'Descargando Nomic Embed Text...';
+      curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"nomic-embed-text\"}';
+      echo 'Modelos listos.';
+      "
 
   minio:
     image: minio/minio
     restart: always
     ports:
-      - "9000:9000" # API
-      - "9001:9001" # Consola UI
+      - "9001:9001" # Consola UI (El puerto 9000 queda interno para la API)
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
@@ -122,10 +159,9 @@ services:
     entrypoint: >
       /bin/sh -c "
       until (/usr/bin/mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}) do echo '...waiting for minio...' && sleep 1; done;
-      /usr/bin/mc mb local/artifacts;
+      /usr/bin/mc mb --ignore-existing local/artifacts; # <--- AÑADE ESTO
       /usr/bin/mc policy set public local/artifacts;
-      exit 0;
-      "
+      exit 0;"
 
 networks:
   frontend-net:

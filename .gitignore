@@ -63,3 +63,8 @@ models/
 *.pth
 *.onnx
 *.bin
+
+# Ollama
+
+ollama_data/
+ollama_storage/

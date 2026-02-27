@@ -1,35 +1,35 @@
-FROM python:3.11-slim-bookworm
-LABEL name="OCR Project - ML Service"
-
-RUN sed -i 's/http:/https:/g' /etc/apt/sources.list.d/debian.sources && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends \
-    libgl1 \
-    libglib2.0-0 \
-    poppler-utils \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-RUN pip install uv
+FROM python:3.11-slim-bookworm AS builder
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
 
-COPY shared /shared
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    python3-dev \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY ml-service/pyproject.toml ml-service/uv.lock ./
-COPY ml-service/src/download_models.py /app/src/download_models.py
-
-RUN uv run python /app/src/download_models.py
-
 
 RUN uv sync --frozen --no-cache --no-install-project
 
+FROM python:3.11-slim-bookworm
+LABEL name="LeaseLens-ML-Service"
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /app/.venv /app/.venv
+
 COPY ml-service/src /app/src
 
-
-ENV PYTHONUNBUFFERED=1
 ENV PATH="/app/.venv/bin:$PATH"
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-ENV PYTHONPATH="/app"
+EXPOSE 8000
 
-EXPOSE 8001 
-CMD ["uv", "run", "python", "src/main.py"]
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

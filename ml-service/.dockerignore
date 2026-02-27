@@ -1,6 +1,0 @@
-.ml-service-venv
-__pycache__
-/models
-.DS_Store
-.vscode
-.git

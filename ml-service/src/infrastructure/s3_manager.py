@@ -4,7 +4,7 @@ from botocore.exceptions import ClientError
 from typing import Optional
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv() 
 
 class S3Manager:
     def __init__(self):
@@ -34,7 +34,7 @@ class S3Manager:
             print(f"Error subiendo a MinIO: {e}")
             return False
 
-    def generate_presigned_url(self, object_name: str, expires_in: int = 3600) -> Optional[str]:
+    def get_download_url(self, object_name: str, expires_in: int = 3600) -> Optional[str]:
         """
         Genera una URL firmada (Presigned URL). 
         ESTO ES VITAL: Tu React no debe entrar a MinIO, usa esta URL temporal.

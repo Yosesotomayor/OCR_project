@@ -1,24 +1,18 @@
 [project]
-name = "ml-service"
+name = "backend"
 version = "0.1.0"
-description = "A project for OCR processing"
+description = "OCR Backend"
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "easyocr>=1.7.2",
-    "fastapi>=0.133.0",
-    "ipykernel>=7.2.0",
-    "numpy>=2.4.2",
-    "shared-schemas>=0.1.0",
+    "psycopg2-binary>=2.9.9",
+    "sqlalchemy>=2.0.27",
+    "python-multipart>=0.0.9",
+    "langchain-community>=0.4.1",
+    "langchain-ollama>=1.0.1",
+    "chromadb>=1.5.1",
+    "pypdf>=6.7.3",
+    "httpx>=0.28.1",
+    "fastapi>=0.133.1",
+    "boto3>=1.42.58",
 ]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["./"]
-
-[tool.uv.workspace]
-members = [
-    "ml-service",
-]
-
-[tool.uv.sources]
-shared-schemas = { path = "../shared" }

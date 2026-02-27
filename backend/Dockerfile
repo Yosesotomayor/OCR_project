@@ -12,8 +12,6 @@ RUN pip install uv
 
 WORKDIR /app
 
-COPY shared /shared
-
 
 COPY backend/pyproject.toml backend/uv.lock ./
 

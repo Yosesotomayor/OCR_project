@@ -1,19 +1,113 @@
-from fastapi import FastAPI, HTTPException
-from shared_schemas.schemas import OCRRequest, OCRResponse
-from model_handler import EasyOCRModel
 import os
+import logging
+import json
+from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from typing import List, Optional
 
-app = FastAPI(title="ML Service - EasyOCR")
+from .infrastructure.s3_manager import S3Manager
+from .infrastructure.vector_manager import VectorManager
+from .parsers.pdf_parser import extract_text_from_pdf
 
-model = EasyOCRModel()
+from langchain_ollama import OllamaLLM
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+import httpx
 
-@app.post("/predict", response_model=OCRResponse)
-async def predict(request: OCRRequest):
-    if not os.path.exists(request.file_path):
-        raise HTTPException(status_code=404, detail="Archivo no encontrado en storage")
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-    try:
-        results = model.predict(request.file_path)
-        return OCRResponse(results=results)
-    except Exception as e:
-        return OCRResponse(status="error", results=[], error=str(e))
+app = FastAPI(title="LeaseLens ML-Service")
+
+
+s3 = S3Manager()
+vector_db = VectorManager()
+
+llm = OllamaLLM(
+    model="llama3.1:8b", 
+    base_url="http://ollama:11434",
+    num_ctx=2048,
+    stop=["<|eot_id|>"]
+)
+INTERNAL_TOKEN = os.getenv("INTERNAL_API_KEY", "super-secret-key-123")
+BACKEND_URL = os.getenv("BACKEND_INTERNAL_URL", "http://backend:8000")
+
+splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+
+class IngestRequest(BaseModel):
+    contract_id: str
+    s3_key: str
+    filename: str
+
+class ChatRequest(BaseModel):
+    question: str
+    history: Optional[List[dict]] = []
+async def run_heavy_processing(contract_id: str, s3_key: str, filename: str):
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+
+            check = await client.get(f"{BACKEND_URL}/contracts/{contract_id}/exists")
+            if check.status_code != 200:
+                logger.error(f"Abortando: {contract_id} no existe en Postgres.")
+                return
+
+            file_bytes = s3.download_file(s3_key)
+            text = extract_text_from_pdf(file_bytes)
+            
+            chunks = splitter.split_text(text)
+            metadatas = [{"doc_id": contract_id, "filename": filename} for _ in chunks]
+            ids = [f"{contract_id}_{i}" for i in range(len(chunks))]
+            vector_db.add_documents(chunks, metadatas, ids)
+
+            prompt = (
+                f"Extrae EXACTAMENTE un objeto JSON del siguiente texto de contrato. "
+                f"Usa estos campos: 'monto_renta' (número), 'moneda' (ISO), 'arrendatario' (nombre). "
+                f"No agregues explicaciones ni backticks. Texto: {text[:4000]}"
+            )
+            raw_extraction = llm.invoke(prompt)
+
+            await client.patch(
+                f"{BACKEND_URL}/contracts/{contract_id}",
+                json={"status": "completed", "extracted_data": raw_extraction},
+                headers={"X-Internal-Token": INTERNAL_TOKEN}
+            )
+            logger.info(f"Contrato {contract_id} procesado exitosamente.")
+
+        except Exception as e:
+            logger.error(f"Error crítico en procesamiento: {e}")
+            await client.patch(
+                f"{BACKEND_URL}/contracts/{contract_id}",
+                json={"status": "error", "error_detail": str(e)},
+                headers={"X-Internal-Token": INTERNAL_TOKEN}
+            )
+
+@app.post("/query-stream")
+async def query_stream(req: ChatRequest):
+    results = vector_db.search(req.question, n_results=5)
+    context = "\n".join(results['documents'][0])
+
+    formatted_history = ""
+    for msg in req.history[-3:]:
+        role = "Usuario" if msg['role'] == 'user' else "Asistente"
+        formatted_history += f"{role}: {msg['content']}\n"
+
+    full_prompt = (
+        f"Eres un analista legal experto de LeaseLens AI.\n"
+        f"Historial de conversación:\n{formatted_history}\n"
+        f"Contexto del contrato:\n{context}\n\n"
+        f"Pregunta del usuario: {req.question}"
+    )
+
+    async def generate():
+        async for chunk in llm.astream(full_prompt):
+            yield chunk
+
+    return StreamingResponse(generate(), media_type="text/plain")
+
+@app.post("/process")
+async def process(req: IngestRequest, background_tasks: BackgroundTasks):
+    background_tasks.add_task(run_heavy_processing, req.contract_id, req.s3_key, req.filename)
+    return {"message": "Queued"}
+
+
