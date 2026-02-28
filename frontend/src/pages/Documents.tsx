@@ -21,38 +21,46 @@ export interface ILeaseContract {
 
 // --- Status Badge ---
 const StatusBadge = memo(({ status, contractId, onFinished }: { status: string, contractId: string, onFinished: () => void }) => {
+  const [currentStatus, setCurrentStatus] = useState(status);
+
   useEffect(() => {
-    if (status !== 'processing') return;
+    if (currentStatus !== 'processing') return;
 
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`${API_URL}/contracts/${contractId}/exists`); // Use exists endpoint for polling
+        const token = localStorage.getItem('access_token');
+        const res = await fetch(`${API_URL}/contracts/${contractId}/status`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        
         if (res.ok) {
           const data = await res.json();
-          if (data.status === 'exists') { // Assuming 'exists' means it's processed or at least in DB
-            const contractRes = await fetch(`${API_URL}/contracts/${contractId}`);
-            const contractData = await contractRes.json();
-            if (contractData.status !== 'processing') {
-              clearInterval(interval);
-              onFinished();
-            }
+          if (data.status !== 'processing') {
+            setCurrentStatus(data.status); // Update local status
+            clearInterval(interval);
+            onFinished(); // Notify parent to refresh full list
           }
-        } else if (res.status === 404) { // Contract not found yet, keep polling
-          // Do nothing, continue polling
+        } else if (res.status === 404) {
+          // Contract might not be in DB yet, or was deleted. Keep polling or mark as error.
+          // For now, keep polling.
         } else {
-          console.error("Error en polling:", res.status);
+          console.error("Error en polling de estado:", res.status);
+          setCurrentStatus('error'); // Mark as error on API issues
           clearInterval(interval);
           onFinished(); // Stop polling on other errors
         }
       } catch (e) {
-        console.error("Error en polling:", e);
+        console.error("Error de red en polling:", e);
+        setCurrentStatus('error'); // Mark as error on network issues
         clearInterval(interval);
         onFinished(); // Stop polling on network errors
       }
-    }, 4000);
+    }, 3000); // Poll every 3 seconds
 
     return () => clearInterval(interval);
-  }, [status, contractId, onFinished]);
+  }, [currentStatus, contractId, onFinished]);
 
   const config = {
     processing: { color: "bg-accent-electric/10 text-accent-electric", icon: Zap, label: "Analizando", anim: "animate-pulse" },
@@ -60,7 +68,7 @@ const StatusBadge = memo(({ status, contractId, onFinished }: { status: string, 
     error: { color: "bg-red-500/10 text-red-500", icon: AlertTriangle, label: "Error", anim: "" },
   };
 
-  const current = config[status as keyof typeof config] || config.error;
+  const current = config[currentStatus as keyof typeof config] || config.error;
 
   return (
     <div className={cn(

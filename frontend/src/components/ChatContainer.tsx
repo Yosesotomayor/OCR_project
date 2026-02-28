@@ -26,10 +26,17 @@ const suggestedPrompts = [
   },
 ];
 
-export default function ChatContainer() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+interface ChatContainerProps {
+  messages: ChatMessage[];
+  setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+  isThinking: boolean;
+  setIsThinking: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+export default function ChatContainer({ messages, setMessages, isThinking, setIsThinking }: ChatContainerProps) {
+
   const [input, setInput] = useState('');
-  const [isThinking, setIsThinking] = useState(false);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const { token } = useAuth(); // Obtener token del hook
 
@@ -37,6 +44,17 @@ export default function ChatContainer() {
   const handleSend = async (text?: string) => {
     const messageText = text || input;
     if (!messageText.trim()) return;
+
+    // Token check
+    if (!token) {
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: "Error: No autenticado. Por favor, inicie sesión de nuevo.",
+        timestamp: new Date().toLocaleTimeString(),
+      }]);
+      return;
+    }
 
     // 1. Agregar mensaje del usuario
     const userMsg: ChatMessage = {
@@ -147,15 +165,15 @@ export default function ChatContainer() {
               >
                 {/* Avatar con diseño Mifel-Tech */}
                 <div className={cn(
-                  "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border transition-all shadow-lg",
+                  "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border transition-all shadow-lg flex-shrink-0", // Added flex-shrink-0
                   msg.role === 'user' ? "bg-accent-electric border-white/20" : "bg-[#0a0a0a] border-[#1f1f1f]"
                 )}>
                   {msg.role === 'user' ? <User size={18} /> : <Zap size={18} className="text-accent-electric fill-accent-electric" />}
                 </div>
                 
-                <div className="space-y-2">
+                <div className="space-y-2 flex-grow overflow-hidden"> {/* Added overflow-hidden here */}
                   <div className={cn(
-                    "rounded-2xl px-5 py-4 text-[13px] leading-relaxed shadow-2xl transition-all",
+                    "rounded-2xl px-5 py-4 text-[13px] leading-relaxed shadow-2xl transition-all break-words", // Added break-words
                     msg.role === 'user' 
                       ? "bg-accent-electric text-white rounded-tr-none font-medium" 
                       : "bg-[#0a0a0a] border border-[#1f1f1f] text-gray-200 rounded-tl-none border-l-2 border-l-accent-electric"

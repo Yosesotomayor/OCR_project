@@ -21,6 +21,7 @@ from .security import (
     create_access_token,
     get_current_active_user,
     get_current_admin_user,
+    validate_internal_token, # Import validate_internal_token
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
 from .models import Contract, User
@@ -64,6 +65,21 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: str
 
+# Pydantic Models for Admin User Management
+class UserCreateAdmin(UserCreate):
+    is_active: bool = True
+    is_admin: bool = False
+
+class UserUpdateAdmin(UserBase):
+    is_active: bool
+    is_admin: bool
+
+class UserStatusUpdate(BaseModel):
+    is_active: bool
+
+class UserAdminStatusUpdate(BaseModel):
+    is_admin: bool
+
 class UserResponse(UserBase):
     id: str
     is_active: bool
@@ -94,6 +110,12 @@ class StripeCheckoutRequest(BaseModel):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+# Pydantic Model for Contract Update from ML Service
+class ContractUpdate(BaseModel):
+    status: str
+    extracted_data: Optional[str] = None # Raw JSON string from LLM
+    error_detail: Optional[str] = None
 
 @app.post("/register", response_model=UserResponse)
 async def register_user(user: UserCreate, db: Session = Depends(get_db)):
@@ -208,9 +230,101 @@ async def create_checkout_session(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# --- Admin User Management Endpoints ---
 @app.get("/admin/users", response_model=List[UserResponse])
 async def read_all_users(current_user: User = Depends(get_current_admin_user), db: Session = Depends(get_db)):
     return db.query(User).all()
+
+@app.post("/admin/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def create_user_admin(
+    user_data: UserCreateAdmin,
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    db_user = db.query(User).filter(User.email == user_data.email).first()
+    if db_user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+    
+    hashed_password = get_password_hash(user_data.password)
+    new_user = User(
+        id=str(uuid.uuid4()),
+        email=user_data.email,
+        hashed_password=hashed_password,
+        is_active=user_data.is_active,
+        is_admin=user_data.is_admin
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
+@app.put("/admin/users/{user_id}", response_model=UserResponse)
+async def update_user_admin(
+    user_id: str,
+    user_data: UserUpdateAdmin,
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    db_user.email = user_data.email
+    db_user.is_active = user_data.is_active
+    db_user.is_admin = user_data.is_admin
+    
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+@app.delete("/admin/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user_admin(
+    user_id: str,
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    db.delete(db_user)
+    db.commit()
+    return
+
+@app.patch("/admin/users/{user_id}/status", response_model=UserResponse)
+async def update_user_status(
+    user_id: str,
+    status_update: UserStatusUpdate,
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    db_user.is_active = status_update.is_active
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+@app.patch("/admin/users/{user_id}/admin-status", response_model=UserResponse)
+async def update_user_admin_status(
+    user_id: str,
+    admin_status_update: UserAdminStatusUpdate,
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    db_user.is_admin = admin_status_update.is_admin
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
 
 # --- Document Management Endpoints ---
 @app.post("/upload")
@@ -250,6 +364,44 @@ async def get_contract_presigned_url(contract_id: str, db: Session = Depends(get
         raise HTTPException(status_code=500, detail="Could not generate presigned URL")
     
     return {"presigned_url": presigned_url}
+
+@app.patch("/contracts/{contract_id}", response_model=Contract, dependencies=[Depends(validate_internal_token)])
+async def update_contract_from_ml(
+    contract_id: str,
+    contract_update: ContractUpdate,
+    db: Session = Depends(get_db)
+):
+    db_contract = db.query(Contract).filter(Contract.id == contract_id).first()
+    if not db_contract:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
+    
+    db_contract.status = contract_update.status
+    db_contract.error_detail = contract_update.error_detail
+
+    if contract_update.extracted_data:
+        # Parse the extracted_data (JSON string) and update relevant fields
+        try:
+            extracted_json = json.loads(contract_update.extracted_data)
+            db_contract.tenant_name = extracted_json.get("arrendatario")
+            db_contract.monthly_rent = extracted_json.get("monto_renta")
+            db_contract.currency = extracted_json.get("moneda")
+            # Assuming expiry_date might also be in extracted_json and needs parsing
+            # db_contract.expiry_date = extracted_json.get("fecha_vencimiento") 
+        except json.JSONDecodeError:
+            db_contract.error_detail = "Error parsing extracted_data JSON"
+            db_contract.status = "error"
+
+    db.add(db_contract)
+    db.commit()
+    db.refresh(db_contract)
+    return db_contract
+
+@app.get("/contracts/{contract_id}/status")
+async def get_contract_status(contract_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    db_contract = db.query(Contract).filter(Contract.id == contract_id).first()
+    if not db_contract:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
+    return {"status": db_contract.status, "error_detail": db_contract.error_detail}
 
 @app.post("/chat/stream")
 async def stream_chat(request: ChatRequest, current_user: User = Depends(get_current_active_user)):

@@ -6,22 +6,23 @@ import {
   Users,
   LogOut,
   Zap,
-  CreditCard // 1. Importar ícono
+  CreditCard
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { useAuth } from '../hooks/useAuth'; // 1. Importar hook
+import { useAuth } from '../hooks/useAuth';
 
-// 2. Añadir Suscripción y corregir rutas
-const navItems = [
+const baseNavItems = [ // Renamed to baseNavItems
   { icon: LayoutDashboard, label: 'Inteligencia', href: '/dashboard' },
   { icon: MessageSquare, label: 'Chat AI', href: '/dashboard/chat' },
   { icon: FileText, label: 'Contratos', href: '/dashboard/documents' },
-  { icon: CreditCard, label: 'Suscripción', href: '/dashboard/subscription' },
-  { icon: Users, label: 'Acceso', href: '/dashboard/admin' },
+  { icon: CreditCard, label: 'Suscripción', href: '/dashboard/subscription', adminOnly: false }, // Added adminOnly flag
+  { icon: Users, label: 'Acceso', href: '/dashboard/admin', adminOnly: true }, // Added adminOnly flag
 ];
 
 export default function DashboardLayout() {
-  const { logout } = useAuth(); // 4. Obtener función logout
+  const { logout, isAdmin } = useAuth(); // Get isAdmin from useAuth
+
+  const navItems = baseNavItems.filter(item => !item.adminOnly || isAdmin); // Filter navItems
 
   return (
     <div className="flex h-screen w-full bg-[#050505] text-white overflow-hidden">
@@ -43,8 +44,7 @@ export default function DashboardLayout() {
               <NavLink
                 key={item.href}
                 to={item.href}
-                // 3. Añadir prop `end` para la ruta principal del dashboard
-                end={item.href === '/dashboard'} 
+                end={item.href === '/dashboard'}
                 className={({ isActive }) => cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-300 group",
                   isActive
@@ -60,7 +60,6 @@ export default function DashboardLayout() {
         </div>
 
         <div className="mt-auto p-6 border-t border-[#1f1f1f]">
-          {/* 5. Añadir onClick al botón de salir */}
           <button 
             onClick={logout}
             className="flex items-center gap-3 px-3 py-2 w-full text-gray-500 hover:text-red-400 transition-colors text-sm"

@@ -22,6 +22,7 @@ interface AuthContextType {
   isAdmin: boolean;
   isAuthenticated: boolean;
   updateUserSubscription: (plan: string, cycle: 'monthly' | 'annually') => Promise<void>;
+  isLoggingOut: boolean; // Added isLoggingOut to context type
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -30,6 +31,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('access_token'));
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false); // Added isLoggingOut state
   const navigate = useNavigate();
 
   const isAuthenticated = !!token;
@@ -99,10 +101,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = useCallback(() => {
-    setToken(null);
-    setUser(null);
-    localStorage.removeItem('access_token');
-    navigate('/login');
+    setIsLoggingOut(true); // Set logging out state
+    setTimeout(() => {
+      setToken(null);
+      setUser(null);
+      localStorage.removeItem('access_token');
+      navigate('/login');
+      setIsLoggingOut(false); // Reset logging out state
+    }, 500); // 500ms delay for animation
   }, [navigate]);
 
   const updateUserSubscription = useCallback(async (plan: string, cycle: 'monthly' | 'annually') => {
@@ -129,7 +135,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setIsLoading(false);
     }
-  }, [token]); // token is now a dependency because it's used in the fetch call
+  }, [token]);
 
   const value = {
     user,
@@ -140,6 +146,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isAdmin,
     isAuthenticated,
     updateUserSubscription,
+    isLoggingOut, // Added isLoggingOut to value
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -48,3 +48,12 @@ class S3Manager:
             return url
         except ClientError:
             return None
+
+    def download_file(self, object_name: str) -> bytes:
+        """Descarga un archivo de MinIO y devuelve su contenido en bytes."""
+        try:
+            response = self.s3_client.get_object(Bucket=self.bucket_name, Key=object_name)
+            return response['Body'].read()
+        except ClientError as e:
+            print(f"Error descargando de MinIO: {e}")
+            raise

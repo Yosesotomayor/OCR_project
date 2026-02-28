@@ -1,6 +1,27 @@
+import { useState, useEffect } from 'react';
 import ChatContainer from '../components/ChatContainer';
+import { PlusCircle } from 'lucide-react';
+import { ChatMessage } from '../types';
+
+const CHAT_HISTORY_KEY = 'chatHistory';
 
 export default function Chat() {
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    const savedHistory = localStorage.getItem(CHAT_HISTORY_KEY);
+    return savedHistory ? JSON.parse(savedHistory) : [];
+  });
+  const [isThinking, setIsThinking] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(messages));
+  }, [messages]);
+
+  const handleNewChat = () => {
+    setMessages([]);
+    setIsThinking(false);
+    localStorage.removeItem(CHAT_HISTORY_KEY); // Clear history from localStorage
+  };
+
   return (
     <div className="h-full flex flex-col relative overflow-hidden bg-[#050505]">
       {/* Efecto de luz ambiental en el fondo */}
@@ -14,17 +35,24 @@ export default function Chat() {
               Conversa con tu base de conocimientos privada con tecnología RAG
             </p>
           </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/5 border border-emerald-500/10 rounded-full">
-            <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-            <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">
-              RTX 4060 Active
-            </span>
-          </div>
+          {/* Botón de Nuevo Chat */}
+          <button
+            onClick={handleNewChat}
+            className="flex items-center gap-2 px-4 py-2 bg-accent-electric text-black rounded-full text-sm font-medium hover:bg-accent-electric/80 transition-colors"
+          >
+            <PlusCircle size={18} />
+            Nuevo Chat
+          </button>
         </div>
       </div>
 
       <div className="flex-1 overflow-hidden relative">
-        <ChatContainer />
+        <ChatContainer 
+          messages={messages}
+          setMessages={setMessages}
+          isThinking={isThinking}
+          setIsThinking={setIsThinking}
+        />
       </div>
     </div>
   );

@@ -28,6 +28,7 @@ def validate_internal_token(token: str = Security(api_key_header)):
 SECRET_KEY = os.environ.get("JWT_SECRET_KEY")
 if not SECRET_KEY:
     raise ValueError("JWT_SECRET_KEY environment variable not set.")
+print(f"JWT_SECRET_KEY loaded: {'*' * len(SECRET_KEY) if SECRET_KEY else 'None'}") # Added print statement
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 
