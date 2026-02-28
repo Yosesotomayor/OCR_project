@@ -82,7 +82,7 @@ const StatusBadge = memo(({ status, contractId, onFinished }: { status: string, 
 });
 
 // --- Fila Nativa (Sin Virtualización Innecesaria) ---
-const ContractRow = ({ doc, fetchContracts, onSelectContract }: { doc: ILeaseContract, fetchContracts: () => void, onSelectContract: (contract: ILeaseContract) => void }) => {
+const ContractRow = ({ doc, fetchContracts, onSelectContract, onDeleteContract }: { doc: ILeaseContract, fetchContracts: () => void, onSelectContract: (contract: ILeaseContract) => void, onDeleteContract: (contractId: string) => void }) => {
   return (
     <div className="group border-b border-[#1f1f1f] hover:bg-white/[0.02] transition-colors flex items-center px-6 py-4">
       <div className="w-10 h-10 rounded-lg bg-accent-electric/5 flex items-center justify-center text-accent-electric group-hover:scale-110 transition-transform mr-6 shrink-0">
@@ -127,6 +127,13 @@ const ContractRow = ({ doc, fetchContracts, onSelectContract }: { doc: ILeaseCon
         >
           Detalles
         </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onDeleteContract(doc.id); }} // Prevent row click, call delete
+          className="text-[10px] font-bold text-red-500 hover:text-red-400 transition-colors p-2 uppercase tracking-tighter"
+          title="Eliminar Contrato"
+        >
+          Eliminar
+        </button>
       </div>
     </div>
   );
@@ -157,6 +164,34 @@ export default function Documents() {
       console.error("Error cargando contratos:", err);
     }
   }, []);
+
+  const handleDeleteContract = useCallback(async (contractId: string) => {
+    if (!window.confirm("¿Estás seguro de que quieres eliminar este contrato? Esta acción es irreversible.")) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`${API_URL}/admin/contracts/${contractId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        alert('Contrato eliminado exitosamente.');
+        fetchContracts(); // Refresh the list
+      } else {
+        const errorData = await response.json();
+        console.error("Error al eliminar contrato:", errorData.detail || response.statusText);
+        alert(`Error al eliminar el contrato: ${errorData.detail || response.statusText}`);
+      }
+    } catch (err) {
+      console.error("Error de red al eliminar contrato:", err);
+      alert('Error de red al eliminar el contrato.');
+    }
+  }, [fetchContracts]);
 
   useEffect(() => {
     fetchContracts();
@@ -324,7 +359,7 @@ export default function Documents() {
           <div className="flex-1 overflow-y-auto min-h-0 scrollbar-thin scrollbar-thumb-[#1f1f1f] scrollbar-track-transparent">
             {filteredContracts.length > 0 ? (
               filteredContracts.map((doc) => (
-                <ContractRow key={doc.id} doc={doc} fetchContracts={fetchContracts} onSelectContract={handleSelectContract} />
+                <ContractRow key={doc.id} doc={doc} fetchContracts={fetchContracts} onSelectContract={handleSelectContract} onDeleteContract={handleDeleteContract} />
               ))
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-gray-600">

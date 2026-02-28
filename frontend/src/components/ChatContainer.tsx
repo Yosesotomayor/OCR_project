@@ -40,6 +40,23 @@ export default function ChatContainer({ messages, setMessages, isThinking, setIs
   const scrollRef = useRef<HTMLDivElement>(null);
   const { token } = useAuth(); // Obtener token del hook
 
+  // --- LÓGICA DE SCROLL ---
+  useEffect(() => {
+    const scrollContainer = scrollRef.current;
+    if (scrollContainer) {
+      // Check if the user is already near the bottom (e.g., within 100px of the bottom)
+      const isScrolledToBottom = scrollContainer.scrollHeight - scrollContainer.clientHeight <= scrollContainer.scrollTop + 100;
+      
+      // Only scroll if near bottom or if it's the assistant's message being streamed
+      const lastMessage = messages[messages.length - 1];
+      const isAssistantStreaming = isThinking && lastMessage?.role === 'assistant' && lastMessage?.content === '';
+
+      if (isScrolledToBottom || isAssistantStreaming) {
+        scrollContainer.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }
+    }
+  }, [messages, isThinking]);
+
   // --- LÓGICA DE STREAMING ---
   const handleSend = async (text?: string) => {
     const messageText = text || input;
@@ -130,7 +147,7 @@ export default function ChatContainer({ messages, setMessages, isThinking, setIs
 
   return (
     <div className="flex flex-col h-full max-w-5xl mx-auto px-6 relative">
-      <div ref={scrollRef} className="flex-1 overflow-y-auto py-10 space-y-8 scrollbar-hide">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto py-10 space-y-8 scrollbar-hide" style={{ overflowAnchor: 'auto' }}>
         {messages.length === 0 && !isThinking ? (
           <div className="flex flex-col items-center justify-center h-full text-center text-gray-500">
               <div className="mb-8 text-center">
@@ -203,9 +220,27 @@ export default function ChatContainer({ messages, setMessages, isThinking, setIs
         )}
       </div>
 
+      {/* Loading indicator when AI is thinking */}
+      {isThinking && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 20 }}
+          className="flex justify-start gap-5 max-w-[90%] mr-auto py-2"
+        >
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border bg-[#0a0a0a] border-[#1f1f1f] flex-shrink-0">
+            <Zap size={18} className="text-accent-electric fill-accent-electric" />
+          </div>
+          <div className="rounded-2xl px-5 py-4 text-[13px] leading-relaxed shadow-2xl bg-[#0a0a0a] border border-[#1f1f1f] text-gray-200 rounded-tl-none border-l-2 border-l-accent-electric">
+            <Loader2 className="h-5 w-5 animate-spin text-accent-electric" />
+            <span className="ml-2">La IA está pensando...</span>
+          </div>
+        </motion.div>
+      )}
+
       {/* Input optimizado para mayor control */}
       <footer className="pb-10 pt-4">
-        <div className="relative group bg-[#0a0a0a] border border-[#1f1f1f] rounded-2xl p-2 flex items-center gap-2 focus-within:border-accent-electric/50 transition-all">
+        <div className="relative group bg-[#0a0a0a] border border-[#1f1f1f] rounded-2xl p-2 flex items-center gap-2 transition-all">
           <textarea
             rows={1}
             value={input}

@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        - VITE_API_URL=http://backend:8000
+        - VITE_API_URL=http://localhost:8000
     image: lease-lens-frontend
     ports:
       - "80:80"
@@ -170,6 +170,8 @@ services:
     depends_on:
       postgresdb:
         condition: service_healthy
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresdb:5432/${POSTGRES_DB}
       - DEFAULT_ADMIN_EMAIL=${DEFAULT_ADMIN_EMAIL}

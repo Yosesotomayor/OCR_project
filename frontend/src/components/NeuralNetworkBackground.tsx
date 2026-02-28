@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react'; // Removed useState
 
 interface Point {
   x: number;
@@ -11,9 +11,15 @@ interface Point {
 
 const NEON_COLOR = '#00e6e6'; // A bright cyan, similar to accent-electric
 
+const INITIAL_POINTS = 80; // Increased from 50
+const MAX_POINTS = 150;    // Increased from 100
+const CONNECTION_DISTANCE = 130; // Increased from 100
+const MOUSE_INFLUENCE_RADIUS = 100; // Decreased from 150
+const REPULSION_FORCE_MULTIPLIER = 0.2; // Decreased from 0.5
+
 const NeuralNetworkBackground: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const mousePosRef = useRef({ x: 0, y: 0 }); // Changed to useRef
   const pointsRef = useRef<Point[]>([]);
   const animationFrameId = useRef<number | null>(null);
 
@@ -36,12 +42,12 @@ const NeuralNetworkBackground: React.FC = () => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // Add a new point if there are too few
-    if (pointsRef.current.length < 50 && Math.random() < 0.05) { // Fewer points, less frequent addition
+    if (pointsRef.current.length < INITIAL_POINTS && Math.random() < 0.05) { // Use INITIAL_POINTS
       pointsRef.current.push(createPoint(canvas));
     }
 
     // Remove old points if there are too many
-    if (pointsRef.current.length > 100) {
+    if (pointsRef.current.length > MAX_POINTS) { // Use MAX_POINTS
       pointsRef.current.shift();
     }
 
@@ -66,11 +72,11 @@ const NeuralNetworkBackground: React.FC = () => {
       pointsRef.current.forEach(other => {
         if (point === other) return;
         const dist = Math.hypot(point.x - other.x, point.y - other.y);
-        if (dist < 100) { // Connection distance
+        if (dist < CONNECTION_DISTANCE) { // Use CONNECTION_DISTANCE
           ctx.beginPath();
           ctx.moveTo(point.x, point.y);
           ctx.lineTo(other.x, other.y);
-          ctx.strokeStyle = `rgba(0, 230, 230, ${0.3 - (dist / 100) * 0.3})`; // Fading neon lines
+          ctx.strokeStyle = `rgba(0, 230, 230, ${0.3 - (dist / CONNECTION_DISTANCE) * 0.3})`; // Fading neon lines
           ctx.lineWidth = 0.5;
           ctx.shadowBlur = 3;
           ctx.shadowColor = NEON_COLOR;
@@ -79,17 +85,17 @@ const NeuralNetworkBackground: React.FC = () => {
       });
 
       // React to mouse position
-      const distToMouse = Math.hypot(point.x - mousePos.x, point.y - mousePos.y);
-      if (distToMouse < 150) { // Mouse influence radius
-        const angleToMouse = Math.atan2(point.y - mousePos.y, point.x - mousePos.x);
-        const repulsionForce = (150 - distToMouse) / 150 * 0.5; // Stronger repulsion
+      const distToMouse = Math.hypot(point.x - mousePosRef.current.x, point.y - mousePosRef.current.y); // Use mousePosRef.current
+      if (distToMouse < MOUSE_INFLUENCE_RADIUS) { // Use MOUSE_INFLUENCE_RADIUS
+        const angleToMouse = Math.atan2(point.y - mousePosRef.current.y, point.x - mousePosRef.current.x); // Use mousePosRef.current
+        const repulsionForce = (MOUSE_INFLUENCE_RADIUS - distToMouse) / MOUSE_INFLUENCE_RADIUS * REPULSION_FORCE_MULTIPLIER; // Use constants
         point.vx += Math.cos(angleToMouse) * repulsionForce;
         point.vy += Math.sin(angleToMouse) * repulsionForce;
       }
     });
 
     animationFrameId.current = requestAnimationFrame(() => updatePoints(canvas, ctx));
-  }, [createPoint, mousePos]);
+  }, [createPoint]); // Removed mousePos from dependency array
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -103,14 +109,14 @@ const NeuralNetworkBackground: React.FC = () => {
       canvas.width = canvas.offsetWidth;
       canvas.height = canvas.offsetHeight;
       // Re-initialize points on resize to distribute them correctly
-      pointsRef.current = Array.from({ length: 50 }, () => createPoint(canvas));
+      pointsRef.current = Array.from({ length: INITIAL_POINTS }, () => createPoint(canvas)); // Use INITIAL_POINTS
     };
 
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
     // Initialize points
-    pointsRef.current = Array.from({ length: 50 }, () => createPoint(canvas));
+    pointsRef.current = Array.from({ length: INITIAL_POINTS }, () => createPoint(canvas)); // Use INITIAL_POINTS
 
     animationFrameId.current = requestAnimationFrame(() => updatePoints(canvas, ctx));
 
@@ -126,10 +132,10 @@ const NeuralNetworkBackground: React.FC = () => {
     const canvas = canvasRef.current;
     if (canvas) {
       const rect = canvas.getBoundingClientRect();
-      setMousePos({
+      mousePosRef.current = { // Update mousePosRef.current
         x: e.clientX - rect.left,
         y: e.clientY - rect.top,
-      });
+      };
     }
   }, []);
 

@@ -1,6 +1,6 @@
 import os
 import logging
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import FastAPI, BackgroundTasks, HTTPException, status # Added HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
@@ -22,12 +22,18 @@ app = FastAPI(title="LeaseLens ML-Service")
 s3 = S3Manager()
 vector_db = VectorManager()
 
+# Add a flag to indicate LLM readiness (simple approach for now)
+llm_ready = False
+
 llm = OllamaLLM(
     model="llama3.1:8b", 
     base_url="http://ollama:11434",
     num_ctx=2048,
     stop=["<|eot_id|>"]
 )
+# After LLM initialization, set the flag
+llm_ready = True
+
 INTERNAL_TOKEN = os.getenv("INTERNAL_API_KEY", "super-secret-key-123")
 BACKEND_URL = os.getenv("BACKEND_INTERNAL_URL", "http://backend:8000")
 
@@ -41,9 +47,16 @@ class IngestRequest(BaseModel):
 class ChatRequest(BaseModel):
     question: str
     history: Optional[List[dict]] = []
+
+@app.get("/health")
+async def health_check():
+    if llm_ready:
+        return {"status": "ok", "llm_ready": True}
+    raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="ML service not ready: LLM not loaded.")
+
 async def run_heavy_processing(contract_id: str, s3_key: str, filename: str):
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=300.0) as client: # Increased timeout
         try:
 
             check = await client.get(f"{BACKEND_URL}/contracts/{contract_id}/exists")
@@ -108,5 +121,15 @@ async def query_stream(req: ChatRequest):
 async def process(req: IngestRequest, background_tasks: BackgroundTasks):
     background_tasks.add_task(run_heavy_processing, req.contract_id, req.s3_key, req.filename)
     return {"message": "Queued"}
+
+@app.delete("/delete-vectors/{contract_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_vectors_from_ml(contract_id: str):
+    try:
+        vector_db.delete_documents(contract_id)
+        logger.info(f"Vectors for contract {contract_id} deleted from vector DB.")
+        return
+    except Exception as e:
+        logger.error(f"Error deleting vectors for contract {contract_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 

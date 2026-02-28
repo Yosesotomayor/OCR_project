@@ -54,11 +54,8 @@ export default function Login() {
   };
 
   return (
-    <AuthLayout>
-      <div className="absolute inset-0 z-0">
-        <NeuralNetworkBackground />
-      </div>
-      <div className="relative z-10 text-center mb-12">
+    <AuthLayout background={<NeuralNetworkBackground />}> {/* Pass NeuralNetworkBackground as prop */}
+      <div className="text-center mb-12">
         <div className="w-20 h-20 bg-[#0a0a0a] border border-[#1f1f1f] rounded-[24px] mx-auto mb-8 flex items-center justify-center shadow-2xl relative group">
           <div className="absolute inset-0 bg-accent-electric/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity" />
           <Zap className="w-10 h-10 text-accent-electric fill-accent-electric relative z-10" />
@@ -71,7 +68,7 @@ export default function Login() {
         </div>
       </div>
       
-      <form className="relative z-10 space-y-8" onSubmit={handleSubmit}>
+      <form className="space-y-8" onSubmit={handleSubmit}>
         <div className="space-y-2">
           <label className="text-[10px] font-black text-gray-600 uppercase tracking-widest ml-1">Protocolo de Identidad</label>
           <input 

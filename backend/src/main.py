@@ -10,6 +10,7 @@ from sqlalchemy import func
 from datetime import timedelta, date
 import os
 import stripe
+import json # Added for json.loads
 
 from . import stripe_webhooks # Moved this import to the top
 
@@ -116,6 +117,21 @@ class ContractUpdate(BaseModel):
     status: str
     extracted_data: Optional[str] = None # Raw JSON string from LLM
     error_detail: Optional[str] = None
+
+# Pydantic Model for Contract Response
+class ContractSchema(BaseModel):
+    id: str
+    filename: str
+    status: str
+    tenant_name: Optional[str] = None
+    monthly_rent: Optional[float] = None # Numeric in SQLAlchemy, float in Pydantic
+    currency: Optional[str] = None
+    expiry_date: Optional[date] = None
+    s3_key: str
+    error_detail: Optional[str] = None
+
+    class Config:
+        from_attributes = True # Formerly orm_mode = True
 
 @app.post("/register", response_model=UserResponse)
 async def register_user(user: UserCreate, db: Session = Depends(get_db)):
@@ -365,7 +381,7 @@ async def get_contract_presigned_url(contract_id: str, db: Session = Depends(get
     
     return {"presigned_url": presigned_url}
 
-@app.patch("/contracts/{contract_id}", response_model=Contract, dependencies=[Depends(validate_internal_token)])
+@app.patch("/contracts/{contract_id}", response_model=ContractSchema, dependencies=[Depends(validate_internal_token)])
 async def update_contract_from_ml(
     contract_id: str,
     contract_update: ContractUpdate,
@@ -455,3 +471,35 @@ async def get_analytics_summary(db: Session = Depends(get_db), current_user: Use
 @app.get("/contracts")
 async def get_all_contracts(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     return db.query(Contract).all()
+
+@app.delete("/admin/contracts/{contract_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_contract(
+    contract_id: str,
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    db_contract = db.query(Contract).filter(Contract.id == contract_id).first()
+    if not db_contract:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
+
+    # Delete from S3
+    s3.delete_file(db_contract.s3_key)
+
+    # Delete from Vector DB
+    try:
+        async with httpx.AsyncClient() as client:
+            ml_service_url = os.getenv("ML_SERVICE_URL", "http://ml-service:8000")
+            await client.delete(
+                f"{ml_service_url}/delete-vectors/{contract_id}",
+                headers={"X-Internal-Token": os.getenv("INTERNAL_API_KEY")} # Use INTERNAL_API_KEY for internal communication
+            )
+        logger.info(f"Vectors for contract {contract_id} deleted from vector DB via ML service.")
+    except Exception as e:
+        logger.error(f"Error calling ML service to delete vectors for contract {contract_id}: {e}")
+        # Decide if this should block the deletion or just log an error
+        # For now, we'll log and continue with DB deletion
+
+    # Delete from database
+    db.delete(db_contract)
+    db.commit()
+    return

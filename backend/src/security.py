@@ -12,6 +12,7 @@ from .infrastructure.database import get_db
 
 
 API_KEY = os.environ.get("INTERNAL_API_KEY")
+print(f"INTERNAL_API_KEY loaded: {'*' * len(API_KEY) if API_KEY else 'None'}") # Added print statement
 if not API_KEY:
     raise ValueError("INTERNAL_API_KEY environment variable not set.")
 api_key_header = APIKeyHeader(name="X-Internal-Token", auto_error=True)

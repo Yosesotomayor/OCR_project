@@ -45,3 +45,8 @@ class VectorManager:
         except Exception as e:
             print(f"Error en búsqueda vectorial: {e}")
             return {"documents": [[]], "metadatas": [[]]}
+
+    def delete_documents(self, doc_id: str):
+        """Elimina documentos de la colección basados en el doc_id (contract_id)."""
+        collection = self.client.get_or_create_collection(name=self.collection_name)
+        collection.delete(where={"doc_id": doc_id})
