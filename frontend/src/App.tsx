@@ -7,6 +7,8 @@ import Admin from './pages/Admin';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Landing from './pages/Landing'; // Import the new Landing page
+import Subscription from './pages/Subscription'; // Import the new Subscription page
+import Forbidden from './pages/Forbidden'; // Import the new Forbidden page
 import { AuthProvider, useAuth } from './hooks/useAuth.tsx'; // Import AuthProvider and useAuth
 import { useEffect } from 'react';
 
@@ -26,7 +28,7 @@ const ProtectedRoute = ({ children, adminOnly = false }: { children: JSX.Element
   }
 
   if (adminOnly && !isAdmin) {
-    return <Navigate to="/dashboard" replace />; // Redirect non-admins from admin page
+    return <Navigate to="/forbidden" replace />; // Redirect non-admins from admin page
   }
 
   return children;
@@ -40,6 +42,7 @@ export default function App() {
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forbidden" element={<Forbidden />} />
           
           {/* Conditional Landing Page or Redirect to Dashboard */}
           {VITE_ENABLE_LANDING_PAGE ? (
@@ -67,6 +70,7 @@ export default function App() {
             <Route index element={<Dashboard />} />
             <Route path="chat" element={<Chat />} />
             <Route path="documents" element={<Documents />} />
+            <Route path="subscription" element={<Subscription />} />
             {/* Admin Protected Route */}
             <Route 
               path="admin" 

@@ -17,11 +17,13 @@ def extract_json_from_text(text: str) -> dict:
 
 def safe_decimal(value) -> Decimal:
     """Limpia strings de moneda (ej: '$15,000.00') y convierte a Decimal."""
-    if value is None: return Decimal("0.00")
-    if isinstance(value, (int, float)): return Decimal(str(value))
+    if value is None:
+        return Decimal("0.00")
+    if isinstance(value, (int, float)):
+        return Decimal(str(value))
     
     clean_val = re.sub(r'[^\d.]', '', str(value))
     try:
         return Decimal(clean_val) if clean_val else Decimal("0.00")
-    except:
+    except ValueError: # Catch specific exception
         return Decimal("0.00")

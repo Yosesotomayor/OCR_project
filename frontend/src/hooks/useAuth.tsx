@@ -8,6 +8,9 @@ interface User {
   email: string;
   is_active: boolean;
   is_admin: boolean;
+  subscription_plan?: string;
+  subscription_status?: string;
+  subscription_end_date?: string; // Assuming date comes as string from API
 }
 
 interface AuthContextType {
@@ -18,6 +21,7 @@ interface AuthContextType {
   logout: () => void;
   isAdmin: boolean;
   isAuthenticated: boolean;
+  updateUserSubscription: (plan: string, cycle: 'monthly' | 'annually') => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -40,10 +44,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       if (response.ok) {
         const userData: User = await response.json();
-        console.log("Fetched user data:", userData); // Add this line
+        console.log("Fetched user data:", userData);
         setUser(userData);
       } else {
-        // Token might be invalid or expired
         console.error("Failed to fetch user data, logging out.");
         logout();
       }
@@ -53,7 +56,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [logout]); // Added logout to dependency array
 
   useEffect(() => {
     if (token) {
@@ -86,14 +89,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const data = await response.json();
       localStorage.setItem('access_token', data.access_token);
       setToken(data.access_token);
-      await fetchUser(data.access_token); // Fetch user details immediately after login
+      await fetchUser(data.access_token);
       return true;
     } catch (error: any) {
       console.error("Login error:", error.message);
       setToken(null);
       setUser(null);
       localStorage.removeItem('access_token');
-      throw error; // Re-throw to be handled by the calling component
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -103,8 +106,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToken(null);
     setUser(null);
     localStorage.removeItem('access_token');
-    navigate('/login'); // Redirect to login page after logout
+    navigate('/login');
   }, [navigate]);
+
+  const updateUserSubscription = useCallback(async (plan: string, cycle: 'monthly' | 'annually') => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/subscription/update`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ subscription_plan: plan, billing_cycle: cycle }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to update subscription');
+      }
+      const updatedUserData: User = await response.json();
+      setUser(updatedUserData);
+      console.log(`Subscription updated: Plan - ${plan}, Cycle - ${cycle}`);
+    } catch (error) {
+      console.error("Error updating subscription:", error);
+      throw error; // Re-throw to be handled by the calling component
+    } finally {
+      setIsLoading(false);
+    }
+  }, [token]); // token is now a dependency because it's used in the fetch call
 
   const value = {
     user,
@@ -114,6 +143,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logout,
     isAdmin,
     isAuthenticated,
+    updateUserSubscription,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

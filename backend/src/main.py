@@ -1,18 +1,18 @@
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Security, status, Form
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, RedirectResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-import httpx, uuid, json
+import httpx
+import uuid
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional, Annotated
 from sqlalchemy import func
-from datetime import timedelta
+from datetime import timedelta, date
 from fastapi.security import OAuth2PasswordRequestForm 
 
 from .infrastructure.database import engine, Base, get_db
 from .infrastructure.s3_manager import S3Manager
 from .security import (
-    validate_internal_token,
     get_password_hash,
     verify_password,
     create_access_token,
@@ -20,7 +20,6 @@ from .security import (
     get_current_admin_user,
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
-from .utils import extract_json_from_text, safe_decimal
 from .models import Contract, User
 
 app = FastAPI(title="LeaseLens API Gateway")
@@ -53,9 +52,16 @@ class UserResponse(UserBase):
     id: str
     is_active: bool
     is_admin: bool
+    subscription_plan: Optional[str] = None
+    subscription_status: Optional[str] = None
+    subscription_end_date: Optional[date] = None
 
     class Config:
         from_attributes = True
+
+class SubscriptionUpdate(BaseModel):
+    subscription_plan: str
+    billing_cycle: str # 'monthly' or 'annually'
 
 class Token(BaseModel):
     access_token: str
@@ -105,6 +111,34 @@ async def login_for_access_token(
 
 @app.get("/users/me", response_model=UserResponse)
 async def read_users_me(current_user: User = Depends(get_current_active_user)):
+    return current_user
+
+@app.get("/subscription/me", response_model=UserResponse)
+async def read_my_subscription(current_user: User = Depends(get_current_active_user)):
+    return current_user
+
+@app.post("/subscription/update", response_model=UserResponse)
+async def update_my_subscription(
+    subscription_update: SubscriptionUpdate,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    # For simplicity, let's assume a fixed end date for now or calculate based on plan
+    # In a real app, this would involve payment processing and more complex logic
+    current_user.subscription_plan = subscription_update.subscription_plan
+    current_user.subscription_status = "active" # Or based on payment confirmation
+    
+    # Calculate subscription_end_date based on billing_cycle
+    if subscription_update.billing_cycle == "monthly":
+        current_user.subscription_end_date = date.today() + timedelta(days=30)
+    elif subscription_update.billing_cycle == "annually":
+        current_user.subscription_end_date = date.today() + timedelta(days=365)
+    else:
+        raise HTTPException(status_code=400, detail="Invalid billing cycle")
+
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
     return current_user
 
 @app.get("/admin/users", response_model=List[UserResponse])
