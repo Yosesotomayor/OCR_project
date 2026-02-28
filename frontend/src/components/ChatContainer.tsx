@@ -119,7 +119,7 @@ export default function ChatContainer({ messages, setMessages, isThinking, setIs
       const decoder = new TextDecoder();
       let accumulatedContent = "";
 
-      setIsThinking(false);
+      // setIsThinking(false); // REMOVED: This was prematurely hiding the loading indicator
 
       // 4. Leer el stream palabra por palabra
       while (true) {
@@ -196,7 +196,7 @@ export default function ChatContainer({ messages, setMessages, isThinking, setIs
                       : "bg-[#0a0a0a] border border-[#1f1f1f] text-gray-200 rounded-tl-none border-l-2 border-l-accent-electric"
                   )}>
                     {/* El contenido fluye aquí */}
-                    {msg.content || (isThinking && msg.role === 'assistant' && <Loader2 className="animate-spin opacity-20" size={14} />)}
+                    {msg.content}
                     
                     <div className="text-[9px] opacity-30 mt-3 text-right font-mono italic">
                       {msg.timestamp}
@@ -247,7 +247,7 @@ export default function ChatContainer({ messages, setMessages, isThinking, setIs
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }}}
             placeholder="Pregunta sobre tus contratos..."
-            className="flex-1 bg-transparent border-none focus:ring-0 text-gray-200 py-3 px-4 text-sm resize-none"
+            className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none !important focus:border-transparent !important text-gray-200 py-3 px-4 text-sm resize-none"
           />
           <button onClick={() => handleSend()} className="p-3 bg-accent-electric text-black rounded-xl hover:scale-105 active:scale-95 transition-all">
             <Send size={20} />

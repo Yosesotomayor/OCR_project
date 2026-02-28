@@ -269,13 +269,6 @@ export default function Admin() {
           <div className="relative group">
             <div className="absolute inset-0 bg-accent-electric/10 blur opacity-0 group-focus-within:opacity-100 transition-opacity rounded-xl" />
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-accent-electric transition-colors" size={16} />
-            <input 
-              type="text" 
-              placeholder="Email, Rol o Estado..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl pl-12 pr-6 py-3.5 text-sm focus:outline-none focus:border-accent-electric/50 transition-all w-80 font-medium"
-            />
           </div>
           <button
             onClick={handleAddUserClick}

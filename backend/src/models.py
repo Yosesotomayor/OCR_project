@@ -11,6 +11,8 @@ class Contract(Base):
     monthly_rent = Column(Numeric(precision=12, scale=2), nullable=True)
     currency = Column(String(3), nullable=True)
     expiry_date = Column(Date, nullable=True)
+    property_name = Column(String, nullable=True) # New field
+    property_zone = Column(String, nullable=True) # New field
     s3_key = Column(String, nullable=False)
     error_detail = Column(Text, nullable=True)
 

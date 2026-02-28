@@ -57,13 +57,6 @@ services:
       - MINIO_BUCKET=artifacts
       - INTERNAL_API_KEY=${INTERNAL_API_KEY}
       - BACKEND_INTERNAL_URL=http://backend:8000
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
     networks:
       - backend-net
     depends_on:
@@ -80,13 +73,6 @@ services:
       - ./ollama_storage:/root/.ollama
     networks:
       - backend-net
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
 
   chromadb:
     image: chromadb/chroma:latest

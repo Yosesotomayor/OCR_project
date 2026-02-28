@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef, memo, useCallback } from 'react';
 import { cn } from '../lib/utils';
 import { 
   FileUp, FileText, CheckCircle, Search, 
-  Calendar, MapPin, DollarSign, Zap, AlertTriangle, X 
+  Calendar, MapPin, DollarSign, Zap, AlertTriangle, X, Trash2 
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -82,9 +82,16 @@ const StatusBadge = memo(({ status, contractId, onFinished }: { status: string, 
 });
 
 // --- Fila Nativa (Sin Virtualización Innecesaria) ---
-const ContractRow = ({ doc, fetchContracts, onSelectContract, onDeleteContract }: { doc: ILeaseContract, fetchContracts: () => void, onSelectContract: (contract: ILeaseContract) => void, onDeleteContract: (contractId: string) => void }) => {
+const ContractRow = ({ doc, fetchContracts, onSelectContract, onDeleteContract, isSelected, onSelect }: { doc: ILeaseContract, fetchContracts: () => void, onSelectContract: (contract: ILeaseContract) => void, onDeleteContract: (contractId: string) => void, isSelected: boolean, onSelect: (contractId: string) => void }) => {
   return (
     <div className="group border-b border-[#1f1f1f] hover:bg-white/[0.02] transition-colors flex items-center px-6 py-4">
+      <input
+        type="checkbox"
+        className="form-checkbox h-4 w-4 text-accent-electric bg-gray-800 border-gray-600 rounded focus:ring-accent-electric mr-4"
+        checked={isSelected}
+        onChange={() => onSelect(doc.id)}
+        onClick={(e) => e.stopPropagation()} // Prevent row click from triggering selection
+      />
       <div className="w-10 h-10 rounded-lg bg-accent-electric/5 flex items-center justify-center text-accent-electric group-hover:scale-110 transition-transform mr-6 shrink-0">
         <FileText size={18} />
       </div>
@@ -148,6 +155,7 @@ export default function Documents() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [selectedContract, setSelectedContract] = useState<ILeaseContract | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [selectedContractIds, setSelectedContractIds] = useState<string[]>([]); // New state for multi-selection
 
   const fetchContracts = useCallback(async () => {
     try {
@@ -193,6 +201,58 @@ export default function Documents() {
     }
   }, [fetchContracts]);
 
+  const handleDeleteSelectedContracts = useCallback(async () => {
+    if (!window.confirm(`¿Estás seguro de que quieres eliminar ${selectedContractIds.length} contratos seleccionados? Esta acción es irreversible.`)) {
+      return;
+    }
+
+    setIsUploading(true); // Use isUploading to disable UI during bulk delete
+    try {
+      const token = localStorage.getItem('access_token');
+      const deletePromises = selectedContractIds.map(contractId =>
+        fetch(`${API_URL}/admin/contracts/${contractId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        })
+      );
+
+      const responses = await Promise.all(deletePromises);
+      const failedDeletions: string[] = [];
+
+      for (let i = 0; i < responses.length; i++) {
+        if (!responses[i].ok) {
+          const errorData = await responses[i].json();
+          console.error(`Error al eliminar contrato ${selectedContractIds[i]}:`, errorData.detail || responses[i].statusText);
+          failedDeletions.push(selectedContractIds[i]);
+        }
+      }
+
+      if (failedDeletions.length === 0) {
+        alert('Contratos seleccionados eliminados exitosamente.');
+      } else {
+        alert(`Se eliminaron ${selectedContractIds.length - failedDeletions.length} contratos. Falló la eliminación de ${failedDeletions.length} contratos.`);
+      }
+      
+      setSelectedContractIds([]); // Clear selection
+      fetchContracts(); // Refresh the list
+    } catch (err) {
+      console.error("Error de red al eliminar contratos seleccionados:", err);
+      alert('Error de red al eliminar contratos seleccionados.');
+    } finally {
+      setIsUploading(false);
+    }
+  }, [selectedContractIds, fetchContracts]);
+
+  const handleSelectContractToggle = useCallback((contractId: string) => {
+    setSelectedContractIds(prev => 
+      prev.includes(contractId)
+        ? prev.filter(id => id !== contractId)
+        : [...prev, contractId]
+    );
+  }, []);
+
   useEffect(() => {
     fetchContracts();
   }, [fetchContracts]);
@@ -200,6 +260,13 @@ export default function Documents() {
   const handleFileUpload = async (file: File) => {
     if (!file || file.type !== 'application/pdf') {
       alert('Por favor, sube un archivo PDF válido.');
+      return;
+    }
+
+    // Check for duplicate filename
+    const existingContract = contracts.find(c => c.filename === file.name);
+    if (existingContract) {
+      alert(`Ya existe un contrato con el nombre "${file.name}".`);
       return;
     }
 
@@ -323,6 +390,18 @@ export default function Documents() {
           </div>
         </header>
 
+        {selectedContractIds.length > 0 && (
+          <div className="mb-4 flex justify-end">
+            <button
+              onClick={handleDeleteSelectedContracts}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors flex items-center gap-2"
+              disabled={isUploading}
+            >
+              <Trash2 size={18} /> Eliminar Seleccionados ({selectedContractIds.length})
+            </button>
+          </div>
+        )}
+
         <div className="grid grid-cols-4 gap-4 mb-6 shrink-0">
           <div className="relative col-span-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={16} />
@@ -359,7 +438,15 @@ export default function Documents() {
           <div className="flex-1 overflow-y-auto min-h-0 scrollbar-thin scrollbar-thumb-[#1f1f1f] scrollbar-track-transparent">
             {filteredContracts.length > 0 ? (
               filteredContracts.map((doc) => (
-                <ContractRow key={doc.id} doc={doc} fetchContracts={fetchContracts} onSelectContract={handleSelectContract} onDeleteContract={handleDeleteContract} />
+                <ContractRow 
+                  key={doc.id} 
+                  doc={doc} 
+                  fetchContracts={fetchContracts} 
+                  onSelectContract={handleSelectContract} 
+                  onDeleteContract={handleDeleteContract}
+                  isSelected={selectedContractIds.includes(doc.id)} // New prop
+                  onSelect={handleSelectContractToggle} // New prop
+                />
               ))
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-gray-600">

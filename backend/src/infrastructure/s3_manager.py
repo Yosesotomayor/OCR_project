@@ -48,3 +48,15 @@ class S3Manager:
             return url
         except ClientError:
             return None
+
+    def delete_file(self, object_name: str) -> bool:
+        """Elimina un archivo de MinIO."""
+        try:
+            self.s3_client.delete_object(
+                Bucket=self.bucket_name,
+                Key=object_name
+            )
+            return True
+        except ClientError as e:
+            print(f"Error eliminando de MinIO: {e}")
+            return False

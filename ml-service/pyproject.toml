@@ -16,4 +16,8 @@ dependencies = [
     "fastapi>=0.133.1",
     "boto3>=1.42.58",
     "ruff>=0.1.0",
+    "easyocr>=1.7.1",
+    "Pillow>=10.3.0",
+    "numpy>=1.26.4",
+    "PyMuPDF>=1.23.26",
 ]
