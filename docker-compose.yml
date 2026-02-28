@@ -4,7 +4,6 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        # IMPORTANTE: Cambia localhost por tu IP si vas a probarlo desde otro dispositivo
         - VITE_API_URL=http://localhost:8000
     image: lease-lens-frontend
     ports:

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import DashboardLayout from './layouts/DashboardLayout';
 import Dashboard from './pages/Dashboard';
 import Chat from './pages/Chat';
@@ -6,29 +6,45 @@ import Documents from './pages/Documents';
 import Admin from './pages/Admin';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import Landing from './pages/Landing'; // Import the new Landing page
-import Subscription from './pages/Subscription'; // Import the new Subscription page
-import Forbidden from './pages/Forbidden'; // Import the new Forbidden page
-import { AuthProvider, useAuth } from './hooks/useAuth.tsx'; // Import AuthProvider and useAuth
-import { useEffect } from 'react';
+import Landing from './pages/Landing'; 
+import Subscription from './pages/Subscription'; 
+import Forbidden from './pages/Forbidden'; 
+import { AuthProvider, useAuth } from './hooks/useAuth.tsx'; 
+import { Zap } from 'lucide-react';
 
 const VITE_ENABLE_LANDING_PAGE = import.meta.env.VITE_ENABLE_LANDING_PAGE === 'true';
 
-// ProtectedRoute component to guard routes
-const ProtectedRoute = ({ children, adminOnly = false }: { children: JSX.Element, adminOnly?: boolean }) => {
+// Componente de carga minimalista para evitar parpadeos bruscos
+const LoadingScreen = () => (
+  <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center">
+    <Zap className="w-12 h-12 text-accent-electric animate-pulse mb-4" />
+    <p className="text-gray-500 text-[10px] font-black uppercase tracking-[0.3em]">
+      Sincronizando Protocolos...
+    </p>
+  </div>
+);
+
+// Componente Guardián de Rutas
+const ProtectedRoute = ({ 
+  children, 
+  adminOnly = false 
+}: { 
+  children: JSX.Element, 
+  adminOnly?: boolean 
+}) => {
   const { isAuthenticated, isAdmin, isLoading } = useAuth();
 
   if (isLoading) {
-    // Optionally render a loading spinner or skeleton here
-    return <div>Cargando...</div>; 
+    return <LoadingScreen />; 
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    // replace evita que el usuario regrese al login con el botón "atrás"
+    return <Navigate to="/login" replace />; 
   }
 
   if (adminOnly && !isAdmin) {
-    return <Navigate to="/forbidden" replace />; // Redirect non-admins from admin page
+    return <Navigate to="/forbidden" replace />; 
   }
 
   return children;
@@ -37,28 +53,29 @@ const ProtectedRoute = ({ children, adminOnly = false }: { children: JSX.Element
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider> {/* Wrap the entire application with AuthProvider */}
+      <AuthProvider>
         <Routes>
-          {/* Public Routes */}
+          {/* --- RUTAS PÚBLICAS --- */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forbidden" element={<Forbidden />} />
           
-          {/* Conditional Landing Page or Redirect to Dashboard */}
-          {VITE_ENABLE_LANDING_PAGE ? (
-            <Route path="/" element={<Landing />} />
-          ) : (
-            <Route 
-              path="/" 
-              element={
-                <ProtectedRoute>
-                  <Navigate to="/dashboard" replace />
-                </ProtectedRoute>
-              } 
-            />
-          )}
+          {/* Ruta Raíz Condicional */}
+          <Route 
+            path="/" 
+            element={
+              VITE_ENABLE_LANDING_PAGE ? (
+                <Landing />
+              ) : (
+                <Navigate to="/dashboard" replace />
+              )
+            } 
+          />
 
-          {/* Authenticated Routes */}
+          {/* --- RUTAS AUTENTICADAS (Layout Anidado) --- */}
+          {/* Importante: DashboardLayout DEBE contener el componente <Outlet /> 
+              para que Chat, Documents, etc., se rendericen en su interior. 
+          */}
           <Route 
             path="/dashboard" 
             element={
@@ -67,11 +84,15 @@ export default function App() {
               </ProtectedRoute>
             }
           >
+            {/* Ruta por defecto al entrar a /dashboard */}
             <Route index element={<Dashboard />} />
+            
+            {/* Rutas Hijas (Se renderizan en el Outlet de DashboardLayout) */}
             <Route path="chat" element={<Chat />} />
             <Route path="documents" element={<Documents />} />
             <Route path="subscription" element={<Subscription />} />
-            {/* Admin Protected Route */}
+            
+            {/* Ruta de Administración con doble validación */}
             <Route 
               path="admin" 
               element={
@@ -82,8 +103,13 @@ export default function App() {
             />
           </Route>
 
-          {/* Fallback for any unmatched routes */}
-          <Route path="*" element={<Navigate to={VITE_ENABLE_LANDING_PAGE ? "/" : "/dashboard"} replace />} />
+          {/* --- FALLBACK (404) --- */}
+          <Route 
+            path="*" 
+            element={
+              <Navigate to={VITE_ENABLE_LANDING_PAGE ? "/" : "/dashboard"} replace />
+            } 
+          />
         </Routes>
       </AuthProvider>
     </BrowserRouter>

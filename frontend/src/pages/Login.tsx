@@ -63,7 +63,7 @@ export default function Login() {
         <p className="text-gray-500 text-xs font-bold uppercase tracking-[0.2em] mb-4">Enterprise Intelligence</p>
         <div className="flex items-center justify-center gap-2 text-[10px] text-accent-electric/60 font-medium">
           <ShieldCheck size={12} />
-          Acceso Biométrico & Cifrado de Punto a Punto
+          Acceso cifrado de Punto a Punto
         </div>
       </div>
       

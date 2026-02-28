@@ -11,7 +11,9 @@ from .models import User
 from .infrastructure.database import get_db
 
 
-API_KEY = os.getenv("INTERNAL_API_KEY", "super-secret-key-123")
+API_KEY = os.environ.get("INTERNAL_API_KEY")
+if not API_KEY:
+    raise ValueError("INTERNAL_API_KEY environment variable not set.")
 api_key_header = APIKeyHeader(name="X-Internal-Token", auto_error=True)
 
 def validate_internal_token(token: str = Security(api_key_header)):
@@ -23,9 +25,11 @@ def validate_internal_token(token: str = Security(api_key_header)):
         )
 
 # User Authentication (JWT)
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-super-secret-jwt-key")
+SECRET_KEY = os.environ.get("JWT_SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("JWT_SECRET_KEY environment variable not set.")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token") # "token" will be our login endpoint

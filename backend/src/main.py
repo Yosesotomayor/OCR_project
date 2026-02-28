@@ -5,10 +5,13 @@ from sqlalchemy.orm import Session
 import httpx
 import uuid
 from pydantic import BaseModel, EmailStr
-from typing import List, Optional, Annotated
+from typing import List, Optional
 from sqlalchemy import func
 from datetime import timedelta, date
-from fastapi.security import OAuth2PasswordRequestForm 
+import os
+import stripe
+
+from . import stripe_webhooks # Moved this import to the top
 
 from .infrastructure.database import engine, Base, get_db
 from .infrastructure.s3_manager import S3Manager
@@ -24,19 +27,32 @@ from .models import Contract, User
 
 app = FastAPI(title="LeaseLens API Gateway")
 
+origins = [
+    "http://localhost",
+    "http://localhost:80",
+    "http://127.0.0.1:80",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # TODO: En producción cambia esto por la URL de tu frontend
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
 s3 = S3Manager()
 ML_SERVICE_URL = "http://ml-service:8000"
 
 Base.metadata.create_all(bind=engine)
+
+app.include_router(stripe_webhooks.router, prefix="/stripe", tags=["Stripe"])
 
 class ChatRequest(BaseModel):
     question: str
@@ -55,6 +71,9 @@ class UserResponse(UserBase):
     subscription_plan: Optional[str] = None
     subscription_status: Optional[str] = None
     subscription_end_date: Optional[date] = None
+    stripe_customer_id: Optional[str] = None
+    stripe_subscription_id: Optional[str] = None
+    stripe_price_id: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -66,6 +85,15 @@ class SubscriptionUpdate(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+class StripeCheckoutRequest(BaseModel):
+    price_id: str
+    success_url: str
+    cancel_url: str
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
 
 @app.post("/register", response_model=UserResponse)
 async def register_user(user: UserCreate, db: Session = Depends(get_db)):
@@ -92,11 +120,18 @@ async def register_user(user: UserCreate, db: Session = Depends(get_db)):
 
 @app.post("/token", response_model=Token)
 async def login_for_access_token(
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    login_data: UserLogin,
     db: Session = Depends(get_db)
 ):
-    user = db.query(User).filter(User.email == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    try:
+        user = db.query(User).filter(User.email == login_data.email).first()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error during login: {e}",
+        )
+    
+    if not user or not verify_password(login_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales incorrectas",
@@ -140,6 +175,38 @@ async def update_my_subscription(
     db.commit()
     db.refresh(current_user)
     return current_user
+
+@app.post("/create-checkout-session")
+async def create_checkout_session(
+    request: StripeCheckoutRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        # If the user doesn't have a Stripe customer ID, create one
+        if not current_user.stripe_customer_id:
+            customer = stripe.Customer.create(email=current_user.email)
+            current_user.stripe_customer_id = customer.id
+            db.add(current_user)
+            db.commit()
+            db.refresh(current_user)
+
+        checkout_session = stripe.checkout.Session.create(
+            customer=current_user.stripe_customer_id,
+            line_items=[
+                {
+                    'price': request.price_id,
+                    'quantity': 1,
+                },
+            ],
+            mode='subscription',
+            success_url=request.success_url,
+            cancel_url=request.cancel_url,
+            client_reference_id=current_user.id, # Link to your internal user ID
+        )
+        return {"checkout_url": checkout_session.url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/admin/users", response_model=List[UserResponse])
 async def read_all_users(current_user: User = Depends(get_current_admin_user), db: Session = Depends(get_db)):

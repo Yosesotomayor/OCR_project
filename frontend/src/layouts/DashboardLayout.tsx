@@ -1,22 +1,28 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  MessageSquare, 
-  FileText, 
-  Users, 
+import {
+  LayoutDashboard,
+  MessageSquare,
+  FileText,
+  Users,
   LogOut,
-  Zap
+  Zap,
+  CreditCard // 1. Importar ícono
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useAuth } from '../hooks/useAuth'; // 1. Importar hook
 
+// 2. Añadir Suscripción y corregir rutas
 const navItems = [
-  { icon: LayoutDashboard, label: 'Inteligencia', href: '/' },
-  { icon: MessageSquare, label: 'RAG Analytics', href: '/chat' },
-  { icon: FileText, label: 'Contratos', href: '/documents' },
-  { icon: Users, label: 'Acceso', href: '/admin' },
+  { icon: LayoutDashboard, label: 'Inteligencia', href: '/dashboard' },
+  { icon: MessageSquare, label: 'Chat AI', href: '/dashboard/chat' },
+  { icon: FileText, label: 'Contratos', href: '/dashboard/documents' },
+  { icon: CreditCard, label: 'Suscripción', href: '/dashboard/subscription' },
+  { icon: Users, label: 'Acceso', href: '/dashboard/admin' },
 ];
 
 export default function DashboardLayout() {
+  const { logout } = useAuth(); // 4. Obtener función logout
+
   return (
     <div className="flex h-screen w-full bg-[#050505] text-white overflow-hidden">
       {/* Sidebar */}
@@ -37,10 +43,12 @@ export default function DashboardLayout() {
               <NavLink
                 key={item.href}
                 to={item.href}
+                // 3. Añadir prop `end` para la ruta principal del dashboard
+                end={item.href === '/dashboard'} 
                 className={({ isActive }) => cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-300 group",
-                  isActive 
-                    ? "bg-accent-electric/5 text-accent-electric border border-accent-electric/20" 
+                  isActive
+                    ? "bg-accent-electric/5 text-accent-electric border border-accent-electric/20"
                     : "text-gray-500 hover:text-gray-200 hover:bg-white/5"
                 )}
               >
@@ -52,7 +60,11 @@ export default function DashboardLayout() {
         </div>
 
         <div className="mt-auto p-6 border-t border-[#1f1f1f]">
-          <button className="flex items-center gap-3 px-3 py-2 w-full text-gray-500 hover:text-red-400 transition-colors text-sm">
+          {/* 5. Añadir onClick al botón de salir */}
+          <button 
+            onClick={logout}
+            className="flex items-center gap-3 px-3 py-2 w-full text-gray-500 hover:text-red-400 transition-colors text-sm"
+          >
             <LogOut className="w-4 h-4" />
             <span className="font-medium">Salir</span>
           </button>

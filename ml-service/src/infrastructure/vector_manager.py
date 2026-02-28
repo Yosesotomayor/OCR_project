@@ -1,6 +1,5 @@
 import os
 import chromadb
-from chromadb.config import Settings
 from langchain_ollama import OllamaEmbeddings
 from typing import List, Dict
 
@@ -13,7 +12,7 @@ class VectorManager:
       
         self.embeddings = OllamaEmbeddings(
             model="nomic-embed-text",
-            base_url=f"http://ollama:11434"
+            base_url="http://ollama:11434"
         )
         self.collection_name = "lease_contracts"
         

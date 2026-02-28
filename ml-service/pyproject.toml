@@ -15,4 +15,5 @@ dependencies = [
     "httpx>=0.28.1",
     "fastapi>=0.133.1",
     "boto3>=1.42.58",
+    "ruff>=0.1.0",
 ]

@@ -25,3 +25,6 @@ class User(Base):
     subscription_plan = Column(String, nullable=True)
     subscription_status = Column(String, nullable=True)
     subscription_end_date = Column(Date, nullable=True)
+    stripe_customer_id = Column(String, nullable=True)
+    stripe_subscription_id = Column(String, nullable=True)
+    stripe_price_id = Column(String, nullable=True)

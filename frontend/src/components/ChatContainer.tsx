@@ -3,6 +3,7 @@ import { Send, Paperclip, Loader2, User, Zap, Info, FileUp } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils';
 import { ChatMessage } from '../types';
+import { useAuth } from '../hooks/useAuth';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -30,6 +31,7 @@ export default function ChatContainer() {
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { token } = useAuth(); // Obtener token del hook
 
   // --- LÓGICA DE STREAMING ---
   const handleSend = async (text?: string) => {
@@ -58,17 +60,25 @@ export default function ChatContainer() {
     }]);
 
     try {
-      // 3. Petición al Backend con historial (Blind spot corregido)
+      // 3. Petición al Backend con historial y TOKEN
       const response = await fetch(`${API_URL}/chat/stream`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` // <-- TOKEN AÑADIDO
+        },
         body: JSON.stringify({
           question: messageText,
           history: messages.slice(-5) // Mandamos los últimos 5 mensajes para contexto
         })
       });
 
-      if (!response.body) throw new Error("No hay stream disponible");
+      if (!response.ok) { // Manejo de error de autenticación
+        if (response.status === 401) {
+          throw new Error("No autenticado. Por favor, inicie sesión de nuevo.");
+        }
+        throw new Error("Error en la respuesta del servidor.");
+      }
       
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
