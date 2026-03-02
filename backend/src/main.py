@@ -27,18 +27,14 @@ from .security import (
 )
 from .models import Contract, User
 
-app = FastAPI(title="LeaseLens API Gateway")
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configuración de CORS estricta pero flexible para desarrollo
-origins = [
-    "http://localhost",
-    "http://localhost:80",
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+app = FastAPI(title="LeaseLens API Gateway")
 
+# Configuración de CORS
+origins = ["*"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -132,6 +128,7 @@ async def get_url(contract_id: str, db: Session = Depends(get_db)):
 @app.post("/upload")
 async def upload(file: UploadFile = File(...), db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
     cid = str(uuid.uuid4())
+    logger.info(f"📤 Recibiendo archivo: {file.filename} (ID: {cid})")
     try:
         content = await file.read()
         key = f"contracts/{cid}/{file.filename}"
@@ -139,35 +136,36 @@ async def upload(file: UploadFile = File(...), db: Session = Depends(get_db), cu
         db_contract = Contract(id=cid, filename=file.filename, s3_key=key, status="processing")
         db.add(db_contract); db.commit()
         
-        # Llamada robusta al ML Service
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        logger.info(f"📡 Notificando al ML Service: {ML_SERVICE_URL}/process")
+        async with httpx.AsyncClient(timeout=10.0) as client:
             try:
-                await client.post(f"{ML_SERVICE_URL}/process", json={"contract_id": cid, "s3_key": key, "filename": file.filename})
-            except httpx.ConnectError:
-                logger.error(f"ML Service no responde al procesar {cid}. Quedara en cola.")
-                # No lanzamos error 500, dejamos que el usuario vea 'processing'
+                resp = await client.post(f"{ML_SERVICE_URL}/process", json={"contract_id": cid, "s3_key": key, "filename": file.filename})
+                logger.info(f"Respuesta ML Service: {resp.status_code}")
+            except Exception as e:
+                logger.error(f"Fallo al conectar con ML Service: {str(e)}")
         
         return {"contract_id": cid, "status": "processing"}
     except Exception as e:
         logger.error(f"Error critico en upload: {str(e)}")
-        raise HTTPException(status_code=500, detail="Error interno al subir documento")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.patch("/contracts/{contract_id}", dependencies=[Depends(validate_internal_token)])
 async def update_ml(contract_id: str, update: ContractUpdate, db: Session = Depends(get_db)):
-    contract = db.query(Contract).filter(Contract.id == contract_id).first()
-    if not contract: raise HTTPException(status_code=404)
-    contract.status = update.status
-    contract.error_detail = update.error_detail
+    logger.info(f"📥 Actualizando contrato {contract_id} desde ML. Status: {update.status}")
+    db_contract = db.query(Contract).filter(Contract.id == contract_id).first()
+    if not db_contract: raise HTTPException(status_code=404)
+    db_contract.status = update.status
+    db_contract.error_detail = update.error_detail
     if update.extracted_data:
         try:
             data = json.loads(update.extracted_data)
-            contract.tenant_name = data.get("arrendatario")
-            contract.monthly_rent = data.get("monto_renta")
-            contract.currency = data.get("moneda")
-            contract.property_name = data.get("nombre_propiedad")
-            contract.property_zone = data.get("zona_propiedad")
+            db_contract.tenant_name = data.get("arrendatario")
+            db_contract.monthly_rent = data.get("monto_renta")
+            db_contract.currency = data.get("moneda")
+            db_contract.property_name = data.get("nombre_propiedad")
+            db_contract.property_zone = data.get("zona_propiedad")
             if data.get("fecha_vencimiento"):
-                try: contract.expiry_date = datetime.strptime(data["fecha_vencimiento"], "%Y-%m-%d").date()
+                try: db_contract.expiry_date = datetime.strptime(data["fecha_vencimiento"], "%Y-%m-%d").date()
                 except: pass
         except: pass
     db.commit(); return {"status": "ok"}
