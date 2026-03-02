@@ -73,18 +73,28 @@ async def run_heavy_processing(contract_id: str, s3_key: str):
         chunks = splitter.split_text(text)
         await asyncio.to_thread(vector_db.add_documents, chunks, [{"doc_id": contract_id} for _ in chunks], [f"{contract_id}_{i}" for i in range(len(chunks))])
 
-        # 3. Extracción (80%) - PROMPT REDISEÑADO ANTI-BLOQUEO
+        # 3. Extracción (80%) - SCHEMA-FIRST EXTRACTION
         await safe_patch(contract_id, {"status": "processing", "progress": 80})
         
-        # 10k chars es el sweet spot para Llama 3.2 3B
-        input_data = text[:10000]
+        # 12k chars para dar más contexto a las fechas de cierre
+        input_data = text[:12000]
         prompt = (
             f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n"
-            f"Eres un experto en extracción de datos de contratos. Tu prioridad es la EXACTITUD.\n"
-            f"REGLAS CRÍTICAS:\n"
-            f"1. MONTO RENTA: Busca el número (ej: $29,703.76) Y compáralo con el texto en paréntesis (ej: VEINTINUEVE MIL SETECIENTOS...). Si hay discrepancia por puntos/comas del OCR, usa el valor que dicte el texto escrito.\n"
-            f"2. FECHAS: Si dice 'a la firma', busca la fecha de firma en el encabezado o al final. Responde siempre en YYYY-MM-DD.\n"
-            f"3. Responde ÚNICAMENTE con JSON.<|eot_id|>\n"
+            f"Eres un experto en auditoría legal. Extrae datos financieros y fechas de este contrato.\n"
+            f"REGLAS DE ORO:\n"
+            f"1. FECHAS: Busca 'vigencia', 'plazo' o 'duración'. Si no hay fecha explícita de inicio, usa la fecha de firma del contrato.\n"
+            f"2. FORMATO: Usa estrictamente YYYY-MM-DD.\n"
+            f"3. SCHEMA: Responde con este JSON exacto:\n"
+            f"{{\n"
+            f"  \"tenant_name\": \"string\",\n"
+            f"  \"monthly_rent\": number,\n"
+            f"  \"currency\": \"MXN/USD\",\n"
+            f"  \"start_date\": \"YYYY-MM-DD\",\n"
+            f"  \"expiry_date\": \"YYYY-MM-DD\",\n"
+            f"  \"property_name\": \"string\",\n"
+            f"  \"property_zone\": \"string\"\n"
+            f"}}\n"
+            f"4. Responde ÚNICAMENTE con el objeto JSON.<|eot_id|>\n"
             f"<|start_header_id|>user<|end_header_id|>\n\n"
             f"TEXTO DEL CONTRATO:\n{input_data}<|eot_id|>\n"
             f"<|start_header_id|>assistant<|end_header_id|>\n\n"

@@ -1,14 +1,19 @@
-# LeaseLens AI: Smart Contract Intelligence 🚀
+# LeaseLens AI: Intelligence Legal & Financial OCR 🚀
+
+LeaseLens AI es un sistema de inteligencia avanzada diseñado para automatizar el ciclo de vida de los contratos de arrendamiento. Utilizando una arquitectura multi-agente y RAG Híbrido, el sistema extrae, valida y analiza datos contractuales con precisión quirúrgica, optimizado para el contexto de innovación bancaria (Mifel).
 
 ## Overview
 
-* [ ]
+*   **Extracción de Alta Fidelidad:** Motor OCR basado en PaddleOCR optimizado a 300 DPI para capturar cifras y fechas sin errores.
+*   **Arquitectura Multi-Agente:** Orquestación de modelos Llama 3.2 (3B) y 3.1 (8B) para separar la extracción determinística del análisis complejo.
+*   **RAG Híbrido:** Combinación de búsqueda semántica en vectores (Memoria Local) con resúmenes estructurados en SQL (Memoria Global).
+*   **Seguridad Enterprise:** Gestión de archivos mediante Minio S3 con URLs firmadas (S3v4) y cifrado en tránsito.
 
 ---
 
 ## Arquitectura del Sistema (Enterprise Orchestration)
 
-El Backend actúa como el **Cerebro Operativo**, gestionando la seguridad, la persistencia y la orquestación de tareas pesadas hacia el motor de ML.
+El sistema utiliza **PGVector** integrado en PostgreSQL 17 para una búsqueda vectorial escalable, eliminando la necesidad de bases de datos de vectores externas.
 
 ```mermaid
 graph TD
@@ -18,22 +23,23 @@ graph TD
 
     subgraph Orchestration_Layer
         FE -->|REST API| BE[FastAPI Gateway]
-        BE -->|Auth / Metadata| PG[(PostgreSQL 17)]
+        BE -->|Auth / Metadata| PG[(PostgreSQL 17 + pgvector)]
         BE -->|Storage| S3[(Minio S3)]
     end
 
     subgraph Intelligence_Layer
         BE -->|Async Task| ML[ML Service]
-        ML -->|Hybrid Search| CDB[(ChromaDB Vector)]
-        ML -->|Inference| OLL[Ollama / Llama 3.1]
+        ML -->|PaddleOCR| OCR[OCR Engine 300 DPI]
+        ML -->|Inference| OLL[Ollama / Llama Multi-Model]
       
         subgraph Multi_Agent_Core
-            ML --- AE[Agente Extractor]
-            ML --- AV[Agente Validador]
-            ML --- AA[Agente Analista]
+            ML --- AE[Agente Extractor - Llama 3.2 3B]
+            ML --- AV[Agente Validador - Llama 3.1 8B]
+            ML --- AA[Agente Analista - Llama 3.1 8B]
         end
     end
 
+    OCR --> AE
     AE -->|JSON Crudo| AV
     AV -->|Data Verificada| BE
     AA -->|RAG Response| BE
@@ -44,61 +50,70 @@ graph TD
 
 ## El Ecosistema Multi-Agente
 
-Para eliminar alucinaciones y garantizar el cumplimiento normativo, el procesamiento de cada contrato sigue un flujo cognitivo dividido en tres agentes especializados:
+### 1. Agente Extractor (Llama 3.2 3B)
+*   **Rol:** Worker determinístico.
+*   **Foco:** Transcripción exacta de llaves financieras (`monto_renta`, `moneda`, `vigencia`).
+*   **Optimización:** Configurado con `Temperature: 0.0` y un prompt anti-bloqueo que fuerza el formato JSON puro.
 
-### 1. Agente Extractor (The Document Worker)
+### 2. Agente Validador (Llama 3.1 8B)
+*   **Rol:** Auditor de Calidad.
+*   **Misión:** Realizar "Cross-Verification" entre cifras numéricas y su representación escrita en el contrato. Detecta discrepancias del OCR y asegura la integridad de los datos antes de la persistencia.
 
-* **Estrategia:** Divide y Vencerás.
-* **Operación:** Analiza el documento página por página (Context Window Optimization).
-* **Configuración:** `Temperature: 0.0` (Determinístico).
-* **Responsabilidad:** Extraer llaves exactas (`monto_renta`, `start_date`, `tenant_name`). No interpreta, solo localiza y transcribe a JSON puro.
-
-### 2. Agente Validador (The Auditor)
-
-* **Estrategia:** Cross-Verification.
-* **Operación:** Recibe el JSON del Extractor y el texto completo del contrato.
-* **Configuración:** `Temperature: 0.1` (Analítico).
-* **Misión Crítica:** Diferenciar entre conceptos similares que confunden a IAs genéricas (ej: distinguir el "Depósito en Garantía" de la "Renta Mensual"). Si detecta una inconsistencia, re-escanea el texto original para corregir el dato antes de mandarlo al Backend.
-
-### 3. Agente Analista (The Contextual Analyst)
-
-* **Estrategia:** RAG Híbrido (Cognitive Router).
-* **Operación:** Interfaz del chat persistente.
-* **Habilidad Especial:** Sabe cuándo usar la **Memoria Global** (PostgreSQL) para datos estadísticos rápidos y cuándo usar la **Memoria Local** (ChromaDB) para buscar cláusulas específicas dentro de los PDFs.
+### 3. Agente Analista (Contextual Analyst)
+*   **Rol:** Interfaz RAG.
+*   **Habilidad:** Router cognitivo que consulta el resumen del portafolio en PostgreSQL y los fragmentos específicos en PGVector para responder preguntas complejas sobre riesgos y términos legales.
 
 ---
 
 ## Stack Tecnológico
 
-
 | Capa          | Tecnologías                                              |
 | :------------ | :-------------------------------------------------------- |
-| **UI/UX**     | React 18, TypeScript, Tailwind v4, Framer Motion          |
-| **Logic**     | Python 3.11, FastAPI, SQLAlchemy                          |
-| **Inference** | Ollama (Llama 3.1 8B), EasyOCR, PyMuPDF                   |
-| **Data**      | PostgreSQL 17 (Metadata), ChromaDB (Vectores), Minio (S3) |
-| **Infra**     | Docker, Docker Compose (GPU Passthrough)                  |
+| **Frontend**  | React 18, TypeScript, Tailwind CSS v4, Framer Motion      |
+| **Backend**   | Python 3.11, FastAPI, SQLAlchemy, Uvicorn                 |
+| **ML / OCR**  | PaddleOCR (300 DPI), PyMuPDF, Nomic-Embed-Text v1.5       |
+| **LLMs**      | Ollama (Llama 3.2 3B & Llama 3.1 8B)                      |
+| **Database**  | PostgreSQL 17 + pgvector (Integrated Vector Search)       |
+| **Storage**   | Minio S3 (Presigned URLs / S3v4)                          |
+| **Infra**     | Docker, Docker Compose (GPU Passthrough Support)          |
 
 ---
 
-## Estándares de Seguridad (Mifel Context)
+## Inicio Rápido (Quick Start)
 
-1. **Zero-Trust Extraction:** El Agente Validador actúa como una capa de QA humana-like, asegurando que los montos financieros sean exactos.
-2. **Encapsulamiento de Archivos:** Los contratos nunca se exponen públicamente. Se generan **URLs Firmadas (S3v4)** con expiración temporal para previsualización e inicio de sesión seguro.
-3. **Memoria Persistente:** Los chats se almacenan por sesión de usuario, permitiendo trazabilidad histórica de las consultas legales.
-4. **Optimización de Recursos:** Implementación de **LLM Warm-up** y pre-procesamiento de imágenes (Grayscale/Resize) para maximizar el throughput de la GPU.
+El proyecto utiliza un `Makefile` para simplificar la orquestación de contenedores.
+
+### 1. Configuración de Entorno
+Copia el archivo de ejemplo y configura tus credenciales:
+```bash
+cp .env.example .env
+```
+
+### 2. Despliegue con Docker
+Para ejecución estándar (CPU):
+```bash
+make run
+```
+
+Para ejecución optimizada con GPU (NVIDIA Docker Toolkit requerido):
+```bash
+make run_gpu
+```
+
+### 3. Comandos Útiles
+*   **Detener sistema:** `make stop`
+*   **Limpiar volúmenes:** `make down`
+*   **Ver logs de un servicio:** `make logs SERVICE_NAME=ml-service`
 
 ---
 
-## Roadmap
+## Estándares de Seguridad
 
-- [X]  RAG Híbrido Multi-Agente.
-- [X]  Dashboard Legal Interactivo con Sort & Meta-analysis.
-- [X]  Sidebar de Chat Colapsable con Memoria.
-- [X]  Barra de Progreso en Tiempo Real (Fases 1-5).
-- [ ]  Exportación de Auditorías a PDF/Excel.
-- [ ]  Conector nativo con Mifel Auth.
+1.  **Zero-Trust Extraction:** Todo dato extraído es auditado por un segundo modelo antes de ser visible en el Dashboard.
+2.  **Encapsulamiento S3:** Acceso a documentos mediante túneles SSL y URLs con expiración de 1 hora.
+3.  **Validación Numérica:** Backend utiliza `clean_numeric` para asegurar tipos `float` y sanitización de montos.
+4.  **Aislamiento de Procesos:** El motor de ML corre en un sandbox dedicado sin acceso directo a la base de datos transaccional.
 
 ---
 
-*Building the future of legal ops with high-performance AI.*
+*LeaseLens AI - Desarrollado para la eficiencia computacional extrema y la escalabilidad legal.*
