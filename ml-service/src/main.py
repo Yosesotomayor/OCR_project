@@ -99,30 +99,28 @@ async def run_heavy_processing(contract_id: str, s3_key: str, filename: str):
             ids = [f"{contract_id}_{i}" for i in range(len(chunks))]
             vector_db.add_documents(chunks, metadatas, ids)
 
-            # 5. Extracción Estructurada con LLM (Ultra-Strict)
+            # 5. Extracción Estructurada con LLM (Ultra-Strict & Numeric Cleaning)
             logger.info("🧠 Invocando LLM para extracción de campos...")
             prompt = (
-                f"### SISTEMA: Eres un extractor de datos JSON robótico.\n"
-                f"### REGLA: RESPONDE ÚNICAMENTE CON UN OBJETO JSON VÁLIDO. NO INCLUYAS TEXTO, EXPLICACIONES NI BACKTICKS.\n"
-                f"### ESQUEMA REQUERIDO:\n"
-                f"{{\n"
-                f"  \"monto_renta\": <float o null>,\n"
-                f"  \"moneda\": \"<ISO string o null>\",\n"
-                f"  \"arrendatario\": \"<string o null>\",\n"
-                f"  \"fecha_vencimiento\": \"<YYYY-MM-DD o null>\",\n"
-                f"  \"nombre_propiedad\": \"<string o null>\",\n"
-                f"  \"zona_propiedad\": \"<string o null>\"\n"
-                f"}}\n\n"
+                f"### SISTEMA: Eres un extractor de datos profesional.\n"
+                f"### REGLA: RESPONDE ÚNICAMENTE CON JSON. SIN EXPLICACIONES.\n"
+                f"### INSTRUCCIONES DE CAMPOS:\n"
+                f"- 'monto_renta': DEBE SER UN NÚMERO PURO (ej: 29703.76). Quita '$' y ','.\n"
+                f"- 'moneda': Código ISO (ej: MXN, USD).\n"
+                f"- 'arrendatario': Nombre de la persona o empresa.\n"
+                f"- 'fecha_vencimiento': Formato YYYY-MM-DD o null.\n"
+                f"- 'nombre_propiedad' y 'zona_propiedad': Strings cortos.\n\n"
                 f"### TEXTO DEL CONTRATO:\n{text[:4000]}"
             )
             raw_extraction = llm.invoke(prompt)
-            
-            # LIMPIEZA AGRESIVA: Eliminar markdown y cualquier texto fuera de las llaves
+
+            # Limpieza profunda del JSON
             clean_json = raw_extraction.strip()
             if "{" in clean_json and "}" in clean_json:
                 clean_json = clean_json[clean_json.find("{"):clean_json.rfind("}")+1]
-            
-            logger.info(f"Datos extraídos: {clean_json}")
+
+            logger.info(f"✨ JSON extraído: {clean_json}")
+
 
             # 6. Notificar al backend
             logger.info(f"Finalizado. Notificando éxito al backend...")

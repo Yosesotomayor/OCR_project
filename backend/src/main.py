@@ -12,28 +12,23 @@ import os
 import stripe
 import json
 import logging
+import re
 
 from . import stripe_webhooks
 from .infrastructure.database import engine, Base, get_db
 from .infrastructure.s3_manager import S3Manager
 from .security import (
-    get_password_hash,
-    verify_password,
-    create_access_token,
-    get_current_active_user,
-    get_current_admin_user,
-    validate_internal_token,
+    get_password_hash, verify_password, create_access_token,
+    get_current_active_user, get_current_admin_user, validate_internal_token,
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
 from .models import Contract, User
 
-# Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="LeaseLens API Gateway")
 
-# Configuración de CORS
 origins = ["*"]
 app.add_middleware(
     CORSMiddleware,
@@ -50,6 +45,15 @@ INTERNAL_TOKEN = os.getenv("INTERNAL_API_KEY")
 
 Base.metadata.create_all(bind=engine)
 
+def clean_numeric(value):
+    if value is None: return None
+    if isinstance(value, (int, float)): return float(value)
+    try:
+        clean_str = re.sub(r'[^\d.]', '', str(value))
+        return float(clean_str)
+    except: return None
+
+# --- MODELOS ---
 class ChatRequest(BaseModel):
     question: str
     history: Optional[List[dict]] = []
@@ -89,6 +93,7 @@ class ContractSchema(BaseModel):
     error_detail: Optional[str] = None
     class Config: from_attributes = True
 
+# --- AUTH ---
 @app.post("/register", response_model=UserResponse)
 async def register_user(user: UserLogin, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.email == user.email).first()
@@ -108,6 +113,7 @@ async def login(data: UserLogin, db: Session = Depends(get_db)):
 @app.get("/users/me", response_model=UserResponse)
 async def me(current: User = Depends(get_current_active_user)): return current
 
+# --- CONTRATOS ---
 @app.get("/contracts", response_model=List[ContractSchema])
 async def list_contracts(db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
     return db.query(Contract).all()
@@ -115,7 +121,7 @@ async def list_contracts(db: Session = Depends(get_db), current: User = Depends(
 @app.get("/contracts/{contract_id}/status")
 async def get_contract_status(contract_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     db_contract = db.query(Contract).filter(Contract.id == contract_id).first()
-    if not db_contract: raise HTTPException(status_code=404, detail="Contract not found")
+    if not db_contract: raise HTTPException(status_code=404)
     return {"status": db_contract.status, "error_detail": db_contract.error_detail}
 
 @app.get("/contracts/{contract_id}/presigned_url")
@@ -123,35 +129,27 @@ async def get_url(contract_id: str, db: Session = Depends(get_db)):
     contract = db.query(Contract).filter(Contract.id == contract_id).first()
     if not contract: raise HTTPException(status_code=404)
     url = s3.generate_presigned_url(contract.s3_key)
-    return {"presigned_url": url.replace("http://minio:9000", "http://localhost:9000")}
+    if not url: raise HTTPException(status_code=500)
+    return {"presigned_url": url}
 
 @app.post("/upload")
 async def upload(file: UploadFile = File(...), db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
     cid = str(uuid.uuid4())
-    logger.info(f"📤 Recibiendo archivo: {file.filename} (ID: {cid})")
     try:
         content = await file.read()
         key = f"contracts/{cid}/{file.filename}"
         s3.upload_file(content, key)
         db_contract = Contract(id=cid, filename=file.filename, s3_key=key, status="processing")
         db.add(db_contract); db.commit()
-        
-        logger.info(f"📡 Notificando al ML Service: {ML_SERVICE_URL}/process")
         async with httpx.AsyncClient(timeout=10.0) as client:
-            try:
-                resp = await client.post(f"{ML_SERVICE_URL}/process", json={"contract_id": cid, "s3_key": key, "filename": file.filename})
-                logger.info(f"Respuesta ML Service: {resp.status_code}")
-            except Exception as e:
-                logger.error(f"Fallo al conectar con ML Service: {str(e)}")
-        
+            try: await client.post(f"{ML_SERVICE_URL}/process", json={"contract_id": cid, "s3_key": key, "filename": file.filename})
+            except: logger.error(f"Fallo conectar ML Service para {cid}")
         return {"contract_id": cid, "status": "processing"}
     except Exception as e:
-        logger.error(f"Error critico en upload: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.patch("/contracts/{contract_id}", dependencies=[Depends(validate_internal_token)])
 async def update_ml(contract_id: str, update: ContractUpdate, db: Session = Depends(get_db)):
-    logger.info(f"📥 Actualizando contrato {contract_id} desde ML. Status: {update.status}")
     db_contract = db.query(Contract).filter(Contract.id == contract_id).first()
     if not db_contract: raise HTTPException(status_code=404)
     db_contract.status = update.status
@@ -160,7 +158,7 @@ async def update_ml(contract_id: str, update: ContractUpdate, db: Session = Depe
         try:
             data = json.loads(update.extracted_data)
             db_contract.tenant_name = data.get("arrendatario")
-            db_contract.monthly_rent = data.get("monto_renta")
+            db_contract.monthly_rent = clean_numeric(data.get("monto_renta"))
             db_contract.currency = data.get("moneda")
             db_contract.property_name = data.get("nombre_propiedad")
             db_contract.property_zone = data.get("zona_propiedad")
@@ -183,7 +181,7 @@ async def delete_contract(contract_id: str, db: Session = Depends(get_db), curre
     try:
         async with httpx.AsyncClient() as client:
             await client.delete(f"{ML_SERVICE_URL}/delete-vectors/{contract_id}", headers={"X-Internal-Token": INTERNAL_TOKEN})
-    except: logger.error(f"Error borrando vectores de {contract_id}")
+    except: pass
     db.delete(contract); db.commit()
 
 @app.get("/analytics/summary")
@@ -203,15 +201,15 @@ async def get_analytics_summary(db: Session = Depends(get_db), current: User = D
 async def chat(req: ChatRequest, db: Session = Depends(get_db)):
     contracts = db.query(Contract).all()
     total_mrr = sum([c.monthly_rent for c in contracts if c.monthly_rent and c.status == "completed"])
-    summary = f"SISTEMA DE GESTIÓN LEGAL - ESTADO ACTUAL:\n- Contratos totales: {len(contracts)}\n- Monto total MRR: {total_mrr} MXN\n- Detalle:\n"
+    summary = f"PORTAFOLIO LEGAL:\n- Contratos: {len(contracts)}\n- MRR Total: {total_mrr} MXN\n- Detalle:\n"
     for c in contracts:
-        summary += f"  * [{c.filename}] Arrendatario: {c.tenant_name or 'N/A'}, Renta: {c.monthly_rent or 0} {c.currency or 'MXN'}, Zona: {c.property_zone or 'N/A'}, Status: {c.status}\n"
+        summary += f"  * [{c.filename}] {c.tenant_name or 'N/A'}, Renta: {c.monthly_rent or 0} {c.currency or 'MXN'}, Status: {c.status}\n"
     req.portfolio_summary = summary
     async def stream():
         async with httpx.AsyncClient(timeout=180.0) as client:
             try:
                 async with client.stream("POST", f"{ML_SERVICE_URL}/query-stream", json=req.dict(), headers={"X-Internal-Token": INTERNAL_TOKEN}) as r:
-                    if r.status_code != 200: yield "Servicio de ML ocupado.".encode("utf-8"); return
+                    if r.status_code != 200: yield "Servicio ocupado.".encode("utf-8"); return
                     async for chunk in r.aiter_bytes(): yield chunk
             except: yield "Timeout GPU.".encode("utf-8")
     return StreamingResponse(stream(), media_type="text/plain")

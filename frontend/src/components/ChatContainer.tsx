@@ -85,7 +85,7 @@ export default function ChatContainer({ messages, setMessages, isThinking, setIs
             <Zap size={48} className="text-accent-electric animate-pulse" />
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-3xl">
               {suggestedPrompts.map((p, i) => (
-                <button key={i} onClick={() => handleSend(p.title)} className="bg-white/2 border border-white/5 p-5 rounded-2xl text-left hover:border-accent-electric/50 transition-all group shadow-xl">
+                <button key={i} onClick={() => handleSend(p.description)} className="bg-white/2 border border-white/5 p-5 rounded-2xl text-left hover:border-accent-electric/50 transition-all group shadow-xl">
                   <p className="text-sm font-bold text-gray-200 mb-1">{p.title}</p>
                   <p className="text-xs text-gray-500">{p.description}</p>
                 </button>
