@@ -100,7 +100,7 @@ class ContractSchema(BaseModel):
     tenant_name: Optional[str] = None
     monthly_rent: Optional[float] = None
     currency: Optional[str] = None
-    start_date: Optional[date] = None # NUEVO
+    start_date: Optional[date] = None
     expiry_date: Optional[date] = None
     property_name: Optional[str] = None
     property_zone: Optional[str] = None
@@ -176,19 +176,30 @@ async def upload(file: UploadFile = File(...), db: Session = Depends(get_db), cu
     s3.upload_file(content, key)
     contract = Contract(id=cid, filename=file.filename, s3_key=key, status="processing", progress=10)
     db.add(contract); db.commit()
+    
+    logger.info(f"🚀 Intentando notificar al ML Service: {ML_SERVICE_URL}/process para {cid}")
     async with httpx.AsyncClient(timeout=10.0) as client:
-        try: await client.post(f"{ML_SERVICE_URL}/process", json={"contract_id": cid, "s3_key": key, "filename": file.filename})
-        except: logger.error(f"Fallo conectar ML Service para {cid}")
+        try: 
+            resp = await client.post(f"{ML_SERVICE_URL}/process", json={"contract_id": cid, "s3_key": key, "filename": file.filename})
+            logger.info(f"✅ ML Service respondio: {resp.status_code}")
+            if resp.status_code != 200:
+                logger.error(f"❌ ML Service error: {resp.text}")
+        except Exception as e: 
+            logger.error(f"❌ ERROR CONECTANDO A ML SERVICE: {str(e)}")
+            
     return {"contract_id": cid, "status": "processing"}
 
 @app.patch("/contracts/{contract_id}", dependencies=[Depends(validate_internal_token)])
 async def update_ml(contract_id: str, update: ContractUpdate, db: Session = Depends(get_db)):
-    logger.info(f"📥 PATCH recibido para {contract_id}. Status: {update.status}")
+    logger.info(f"📥 PATCH recibido para {contract_id}. Status: {update.status}, Progress: {update.progress}")
     db_contract = db.query(Contract).filter(Contract.id == contract_id).first()
     if not db_contract: raise HTTPException(404)
+    
     db_contract.status = update.status
-    if update.progress is not None: db_contract.progress = update.progress
+    if update.progress is not None: 
+        db_contract.progress = update.progress
     db_contract.error_detail = update.error_detail
+    
     if update.extracted_data:
         try:
             data = json.loads(update.extracted_data)
@@ -197,7 +208,6 @@ async def update_ml(contract_id: str, update: ContractUpdate, db: Session = Depe
             db_contract.currency = data.get("moneda")
             db_contract.property_name = data.get("nombre_propiedad")
             db_contract.property_zone = data.get("zona_propiedad")
-            # PARSEO DE FECHAS
             if data.get("fecha_inicio"):
                 try: db_contract.start_date = datetime.strptime(data["fecha_inicio"], "%Y-%m-%d").date()
                 except: pass
@@ -205,7 +215,9 @@ async def update_ml(contract_id: str, update: ContractUpdate, db: Session = Depe
                 try: db_contract.expiry_date = datetime.strptime(data["fecha_vencimiento"], "%Y-%m-%d").date()
                 except: pass
         except: pass
-    db.commit(); return {"status": "ok"}
+    
+    db.commit()
+    return {"status": "ok"}
 
 @app.get("/contracts/{contract_id}/exists", dependencies=[Depends(validate_internal_token)])
 async def exists(contract_id: str, db: Session = Depends(get_db)):
@@ -223,6 +235,7 @@ async def delete_contract(contract_id: str, db: Session = Depends(get_db), curre
     except: pass
     db.delete(contract); db.commit()
 
+# --- ANALYTICS ---
 @app.get("/analytics/summary")
 async def get_analytics_summary(db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
     now = datetime.now()
@@ -236,6 +249,7 @@ async def get_analytics_summary(db: Session = Depends(get_db), current: User = D
         "upcoming_expirations": exp30, "compliance_score": round(100 - (errors/total*100), 1) if total > 0 else 100, "error_count": errors
     }
 
+# --- STREAMING CHAT ---
 @app.post("/chat/stream")
 async def chat(req: ChatRequest, db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
     if not req.chat_id:

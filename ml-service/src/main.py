@@ -36,6 +36,7 @@ async def warmup():
 
 INTERNAL_TOKEN = os.getenv("INTERNAL_API_KEY", "super-secret-key-123")
 BACKEND_URL = os.getenv("BACKEND_INTERNAL_URL", "http://backend:8000")
+logger.info(f"🔑 Internal Token configurado: {'*' * len(INTERNAL_TOKEN)}")
 splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
 
 class IngestRequest(BaseModel):
