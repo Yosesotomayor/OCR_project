@@ -28,13 +28,13 @@ INTERNAL_TOKEN = os.getenv("INTERNAL_API_KEY", "super-secret-key-123")
 BACKEND_URL = os.getenv("BACKEND_INTERNAL_URL", "http://backend:8000")
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 
-# Motor IA - Usamos un timeout más corto y un contexto optimizado para extracción
+# Motor IA - Usamos un contexto ampliado para capturar cláusulas de vigencia
 llm = OllamaLLM(
     model="llama3.2:3b", 
     base_url=OLLAMA_URL, 
-    num_ctx=2048, # Reducido para mayor velocidad
+    num_ctx=4096, # Aumentado para manejar más texto y detectar fechas lejanas
     temperature=0.0,
-    timeout=60.0
+    timeout=90.0
 )
 
 class IngestRequest(BaseModel):
@@ -83,13 +83,14 @@ async def run_heavy_processing(contract_id: str, s3_key: str):
 
         # 3. Extracción IA (80%)
         await safe_patch(contract_id, {"status": "processing", "progress": 80})
-        logger.info(f"🤖 Extrayendo metadatos IA para {contract_id}")
+        logger.info(f"🤖 Extrayendo metadatos IA para {contract_id} (Ventana 15k)")
         
-        # Usamos un fragmento más pequeño para asegurar velocidad
-        context_text = text[:6000]
+        # Aumentamos a 15k para llegar a la vigencia/plazo
+        context_text = text[:15000]
         prompt = (
-            f"### INSTRUCCIÓN: Extrae la información del contrato y responde ÚNICAMENTE con un objeto JSON.\n"
-            f"### CAMPOS REQUERIDOS: arrendatario, monto_renta (solo número), moneda (ej. MXN), fecha_inicio (YYYY-MM-DD), fecha_vencimiento (YYYY-MM-DD), zona_propiedad.\n"
+            f"### INSTRUCCIÓN: Eres un extractor de datos legales. Lee el contrato y responde ÚNICAMENTE con un JSON.\n"
+            f"### TAREA ESPECIAL: Identifica con precisión la fecha de inicio y vencimiento. Busca cláusulas de 'Vigencia', 'Plazo' o 'Duración'.\n"
+            f"### CAMPOS REQUERIDOS: arrendatario, monto_renta (float), moneda, fecha_inicio (YYYY-MM-DD), fecha_vencimiento (YYYY-MM-DD), zona_propiedad.\n"
             f"### CONTRATO:\n{context_text}\n\n"
             f"### JSON:"
         )
@@ -121,9 +122,6 @@ async def run_heavy_processing(contract_id: str, s3_key: str):
             "progress": 100, 
             "extracted_data": json.dumps(final_data)
         })
-        
-        if not success:
-            logger.error(f"❌ No se pudo marcar como completado en backend para {contract_id}")
         
     except Exception as e:
         logger.error(f"💥 Error crítico: {e}")
