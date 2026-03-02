@@ -103,17 +103,22 @@ export default function Documents() {
 
   useEffect(() => { if (token) fetchContracts(); }, [token, fetchContracts]);
 
-  const handleFileUpload = async (file: File) => {
-    if (!file || file.type !== 'application/pdf') return alert('Solo PDFs');
+  const handleFileUpload = async (files: FileList | File[]) => {
+    const fileArray = Array.from(files).filter(f => f.type === 'application/pdf');
+    if (fileArray.length === 0) return alert('Solo PDFs');
+    
     setIsUploading(true);
-    const formData = new FormData(); formData.append('file', file);
     try {
-      const res = await fetch(`${API_URL}/upload`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData,
-      });
-      if (res.ok) await fetchContracts();
+      for (const file of fileArray) {
+        const formData = new FormData();
+        formData.append('file', file);
+        await fetch(`${API_URL}/upload`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData,
+        });
+      }
+      await fetchContracts();
     } catch (err) { console.error(err); } finally { setIsUploading(false); }
   };
 
@@ -184,8 +189,16 @@ export default function Documents() {
           )}
           
           <div className="relative group p-4 border-2 border-dashed border-white/10 rounded-2xl hover:border-accent-electric/50 transition-all cursor-pointer">
-            <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept=".pdf" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])} disabled={isUploading} />
+            <input 
+              type="file" 
+              className="absolute inset-0 opacity-0 cursor-pointer" 
+              accept=".pdf" 
+              multiple 
+              onChange={(e) => e.target.files && handleFileUpload(e.target.files)} 
+              disabled={isUploading} 
+            />
             <div className="flex items-center gap-3 text-sm font-bold text-gray-400">
+
               {isUploading ? <Loader2 className="animate-spin text-accent-electric" size={20} /> : <FileUp size={20} />}
               {isUploading ? "Procesando..." : "Subir nuevo contrato"}
             </div>

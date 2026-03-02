@@ -9,7 +9,7 @@ const API_URL = import.meta.env.VITE_API_URL;
 
 const suggestedPrompts = [
   { title: "Resumen de contratos", description: "En resumen, ¿Cuántos contratos tengo y quiénes son los arrendatarios?" },
-  { title: "Vencimientos próximos", description: "Identifica contratos que vencen en los próximos 30 días." },
+  { title: "Vencimientos próximos", description: "Identifica contratos que tienen fecha de vencimiento para dentro de los próximos 30 días." },
   { title: "Análisis de rentas", description: "¿Cuál es el monto total de renta mensual en todos mis contratos en MXN?" },
 ];
 

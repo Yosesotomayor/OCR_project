@@ -111,7 +111,7 @@ export default function Dashboard() {
                   <td className="px-6 py-4 font-mono text-accent-electric font-bold text-sm">
                     {c.monthly_rent ? formatCurrency(c.monthly_rent) : 'N/A'}
                   </td>
-                  <td className="px-6 py-4 text-gray-400 font-mono italic">{c.expiry_date || 'En proceso'}</td>
+                  <td className="px-6 py-4 text-gray-400 font-mono italic">{c.expiry_date || 'S/I'}</td>
                   <td className="px-6 py-4">
                     <span className={cn(
                       "px-2 py-1 rounded-full text-[8px] font-black uppercase tracking-widest",
