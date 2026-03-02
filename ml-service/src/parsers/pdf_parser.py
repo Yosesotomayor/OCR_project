@@ -1,47 +1,57 @@
-from pypdf import PdfReader
 import io
-import easyocr # New import
-from PIL import Image # New import for image processing
-import numpy as np # New import for image processing
-import fitz # PyMuPDF for converting PDF to image
+import numpy as np
+import fitz  # PyMuPDF
+from PIL import Image
+from paddleocr import PaddleOCR
+import logging
 
-# Initialize EasyOCR reader once
-# This can be slow, so it's done at module level
-# 'en' for English, 'es' for Spanish
-reader = easyocr.Reader(['es', 'en'], gpu=True) # Assuming GPU is available in ML service
+# Configurar logging para PaddleOCR (reducir ruido)
+logging.getLogger("ppocr").setLevel(logging.ERROR)
+
+# Inicializar PaddleOCR (Español e Inglés)
+# use_angle_cls=True ayuda a detectar texto rotado
+# lang="es" para optimizar detección en español
+ocr = PaddleOCR(use_angle_cls=True, lang="es", show_log=False)
 
 def extract_text_from_pdf(file_content: bytes) -> str:
     """
-    Extrae texto preservando la estructura visual para facilitar el Chunking Semántico.
-    Usa OCR solo si el texto nativo es insuficiente.
+    Extrae texto de un PDF usando PaddleOCR para máxima precisión.
+    Preserva el flujo de lectura del documento.
     """
     full_text = ""
     try:
-        # 1. Extracción Nativa con PyMuPDF (Mejor que pypdf para layout)
+        # Abrir documento con PyMuPDF
         doc = fitz.open(stream=file_content, filetype="pdf")
-
-        for page in doc:
-            # Obtener texto con estructura de bloques
-            text = page.get_text("text") 
-            if text.strip():
-                full_text += f"--- PÁGINA {page.number + 1} ---\n{text}\n"
-
-        # 2. Si el texto es muy pobre (< 50 caracteres por página), usar OCR
-        if len(full_text) < 50 * len(doc):
-            print("⚠️ Texto nativo insuficiente. Activando OCR de GPU...")
-            full_text = "" # Reiniciar
-            for page_num in range(len(doc)):
-                page = doc.load_page(page_num)
-                pix = page.get_pixmap()
-                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                img_np = np.array(img)
-
-                # EasyOCR con detalle para reconstruir líneas
-                results = reader.readtext(img_np, detail=0, paragraph=True)
-                page_text = "\n".join(results)
+        
+        for page_num in range(len(doc)):
+            page = doc.load_page(page_num)
+            
+            # 1. Intentar extracción nativa primero (rápida)
+            native_text = page.get_text("text")
+            
+            # Si la página tiene texto real suficiente, lo usamos
+            if native_text.strip() and len(native_text) > 100:
+                full_text += f"--- PÁGINA {page_num + 1} ---\n{native_text}\n"
+                continue
+            
+            # 2. Si no hay texto nativo (escaneado), usamos PaddleOCR
+            # Renderizar página a imagen de alta resolución para OCR (300 DPI)
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2)) 
+            img_data = pix.samples
+            img = Image.frombytes("RGB", [pix.width, pix.height], img_data)
+            img_np = np.array(img)
+            
+            # Ejecutar PaddleOCR
+            result = ocr.ocr(img_np, cls=True)
+            
+            if result and result[0]:
+                # PaddleOCR devuelve [box, (text, confidence)]
+                page_text = "\n".join([line[1][0] for line in result[0]])
                 full_text += f"--- PÁGINA {page_num + 1} (OCR) ---\n{page_text}\n"
+            else:
+                full_text += f"--- PÁGINA {page_num + 1} (VACÍA) ---\n"
 
         return full_text
-
+            
     except Exception as e:
-        return f"ERROR CRÍTICO EN PARSER: {str(e)}"
+        return f"ERROR CRÍTICO EN PARSER PADDLE: {str(e)}"

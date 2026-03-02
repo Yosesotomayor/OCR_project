@@ -48,8 +48,7 @@ services:
     image: lease-lens-ml-service
     environment:
       - PYTHONPATH=/app
-      - CHROMA_HOST=chromadb
-      - CHROMA_PORT=8000
+      # Configuracion PGVector
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresdb:5432/${POSTGRES_DB}
       - MINIO_ENDPOINT=http://minio:9000
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
@@ -60,7 +59,7 @@ services:
     networks:
       - backend-net
     depends_on:
-      - chromadb
+      - postgresdb
       - ollama
     env_file:
       - .env
@@ -73,17 +72,17 @@ services:
       - ./ollama_storage:/root/.ollama
     networks:
       - backend-net
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
-  chromadb:
-    image: chromadb/chroma:latest
-    restart: always
-    volumes:
-      - chroma_data:/chroma/data
-    networks:
-      - backend-net
-
+  # USAMOS LA IMAGEN DE POSTGRES CON LA EXTENSION PGVECTOR YA INSTALADA
   postgresdb:
-    image: postgres:17-bookworm
+    image: pgvector/pgvector:pg16
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -114,8 +113,10 @@ services:
       until curl -s http://ollama:11434/api/tags > /dev/null; do
         sleep 5;
       done;
-      echo 'Descargando Llama 3.1:8b...';
+      echo 'Descargando Llama 3.1:8b (Analista)...';
       curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"llama3.1:8b\"}';
+      echo 'Descargando Llama 3.2:3b (Extractor Rápido)...';
+      curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"llama3.2:3b\"}';
       echo 'Descargando Nomic Embed Text...';
       curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"nomic-embed-text\"}';
       echo 'Modelos listos.';
@@ -125,8 +126,8 @@ services:
     image: minio/minio
     restart: always
     ports:
-      - "9000:9000" # API
-      - "9001:9001" # Consola UI
+      - "9000:9000"
+      - "9001:9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
@@ -145,7 +146,7 @@ services:
     entrypoint: >
       /bin/sh -c "
       until (/usr/bin/mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}) do echo '...waiting for minio...' && sleep 1; done;
-      /usr/bin/mc mb --ignore-existing local/artifacts; # <--- AÑADE ESTO
+      /usr/bin/mc mb --ignore-existing local/artifacts;
       /usr/bin/mc policy set public local/artifacts;
       exit 0;"
 
@@ -188,6 +189,5 @@ networks:
 
 volumes:
   postgres_data:
-  chroma_data:
   minio_data:
   pgadmin_data:

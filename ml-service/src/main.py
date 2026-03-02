@@ -22,21 +22,24 @@ app = FastAPI(title="LeaseLens ML-Service")
 s3 = S3Manager()
 vector_db = VectorManager()
 
-# --- AGENTES ESPECIALIZADOS ---
+# --- AGENTES ESPECIALIZADOS (High Performance) ---
+# Usamos Llama 3.1 8B para tareas que requieren razonamiento complejo
 llm_chat = OllamaLLM(model="llama3.1:8b", base_url="http://ollama:11434", num_ctx=4096, temperature=0.7)
-llm_extractor = OllamaLLM(model="llama3.1:8b", base_url="http://ollama:11434", num_ctx=4096, temperature=0.1)
 llm_validator = OllamaLLM(model="llama3.1:8b", base_url="http://ollama:11434", num_ctx=4096, temperature=0.1)
+
+# Usamos Llama 3.2 3B para la extracción mecánica por su velocidad
+llm_extractor = OllamaLLM(model="llama3.2:3b", base_url="http://ollama:11434", num_ctx=4096, temperature=0.0)
 
 @app.on_event("startup")
 async def warmup():
     try:
-        llm_chat.invoke("Hi")
+        logger.info("🔥 Calentando motores de IA...")
+        llm_chat.invoke("ready")
         logger.info("✅ Multi-Agentes listos.")
     except: pass
 
 INTERNAL_TOKEN = os.getenv("INTERNAL_API_KEY", "super-secret-key-123")
 BACKEND_URL = os.getenv("BACKEND_INTERNAL_URL", "http://backend:8000")
-logger.info(f"🔑 Internal Token configurado: {'*' * len(INTERNAL_TOKEN)}")
 splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
 
 class IngestRequest(BaseModel):
@@ -57,24 +60,24 @@ async def run_heavy_processing(contract_id: str, s3_key: str, filename: str):
     logger.info(f"⚙️ Procesando: {contract_id} ({filename})")
     async with httpx.AsyncClient(timeout=300.0) as client:
         try:
-            # 1. OCR (20%)
+            # 1. Fase OCR (20%)
             await client.patch(f"{BACKEND_URL}/contracts/{contract_id}", json={"status": "processing", "progress": 20}, headers={"X-Internal-Token": INTERNAL_TOKEN})
             file_bytes = s3.download_file(s3_key)
             if not file_bytes: return
             text = extract_text_from_pdf(file_bytes)
             
-            # 2. Vectorizacion (40%)
+            # 2. Fase Vectorización (40%)
             await client.patch(f"{BACKEND_URL}/contracts/{contract_id}", json={"status": "processing", "progress": 40}, headers={"X-Internal-Token": INTERNAL_TOKEN})
             chunks = splitter.split_text(text)
             vector_db.add_documents(chunks, [{"doc_id": contract_id} for _ in chunks], [f"{contract_id}_{i}" for i in range(len(chunks))])
 
-            # 3. Extraccion (70%)
+            # 3. Fase Extracción con Llama 3.2 (70%)
             await client.patch(f"{BACKEND_URL}/contracts/{contract_id}", json={"status": "processing", "progress": 70}, headers={"X-Internal-Token": INTERNAL_TOKEN})
             pages = text.split("--- PÁGINA")
             raw_data = {}
             target_fields = ["monto_renta", "moneda", "arrendatario", "fecha_inicio", "fecha_vencimiento", "zona_propiedad", "nombre_propiedad"]
             
-            for i, page_content in enumerate(pages[:15]):
+            for page_content in pages[:15]:
                 if not page_content.strip(): continue
                 extract_prompt = (
                     f"### TAREA: Extrae datos del contrato en JSON.\n"
@@ -88,17 +91,16 @@ async def run_heavy_processing(contract_id: str, s3_key: str, filename: str):
                     if "{" in clean:
                         data = json.loads(clean[clean.find("{"):clean.rfind("}")+1])
                         for k in target_fields:
-                            if data.get(k) and not raw_data.get(k):
-                                raw_data[k] = data[k]
+                            if data.get(k) and not raw_data.get(k): raw_data[k] = data[k]
                 except: continue
 
-            # 4. Validacion (90%)
+            # 4. Fase Validación con Llama 3.1 (90%)
             await client.patch(f"{BACKEND_URL}/contracts/{contract_id}", json={"status": "processing", "progress": 90}, headers={"X-Internal-Token": INTERNAL_TOKEN})
             validation_prompt = (
                 f"### SISTEMA: Auditor Legal.\n"
                 f"### TEXTO:\n{text[:5000]}\n\n"
                 f"### DATOS:\n{json.dumps(raw_data)}\n\n"
-                f"### TAREA: Corrige montos y fechas (inicio y vencimiento).\n"
+                f"### TAREA: Corrige montos y fechas.\n"
                 f"### RESPUESTA (SOLO JSON FINAL):"
             )
             validated_resp = llm_validator.invoke(validation_prompt)
@@ -133,7 +135,9 @@ async def query_stream(req: ChatRequest):
     if not is_global:
         results = vector_db.search(req.question, n_results=5)
         context = "\n".join(results['documents'][0])
+    
     history = "".join([f"{m['role']}: {m['content']}\n" for m in req.history[-3:]])
+    
     full_prompt = (
         f"### ROL: Analista Senior LeaseLens AI.\n"
         f"### MEMORIA GLOBAL:\n{req.portfolio_summary}\n\n"
