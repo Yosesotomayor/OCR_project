@@ -18,9 +18,15 @@ interface ChatContainerProps {
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   isThinking: boolean;
   setIsThinking: React.Dispatch<React.SetStateAction<boolean>>;
+  activeChatId: string | null;
+  setActiveChatId: (id: string) => void;
+  onSessionCreated: () => void;
 }
 
-export default function ChatContainer({ messages, setMessages, isThinking, setIsThinking }: ChatContainerProps) {
+export default function ChatContainer({ 
+  messages, setMessages, isThinking, setIsThinking, 
+  activeChatId, setActiveChatId, onSessionCreated 
+}: ChatContainerProps) {
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const { token } = useAuth();
@@ -53,11 +59,22 @@ export default function ChatContainer({ messages, setMessages, isThinking, setIs
       const response = await fetch(`${API_URL}/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ question: messageText, history: messages.slice(-5) })
+        body: JSON.stringify({ 
+          question: messageText, 
+          history: messages.slice(-5),
+          chat_id: activeChatId 
+        })
       });
 
       if (!response.ok) throw new Error("GPU Offline");
       
+      // Capturar el Chat-ID de la cabecera si es nuevo
+      const newChatId = response.headers.get("X-Chat-ID");
+      if (newChatId && !activeChatId) {
+        setActiveChatId(newChatId);
+        onSessionCreated();
+      }
+
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let accumulatedContent = "";
@@ -71,7 +88,7 @@ export default function ChatContainer({ messages, setMessages, isThinking, setIs
         }
       }
     } catch (err) {
-      setMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: "⚠️ Error de conexión con la GPU. Por favor, verifica que Ollama esté corriendo." } : msg));
+      setMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: "⚠️ Error de conexión con la GPU." } : msg));
     } finally {
       setIsThinking(false);
     }

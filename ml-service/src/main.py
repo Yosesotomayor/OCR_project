@@ -36,7 +36,7 @@ llm_validator = OllamaLLM(model="llama3.1:8b", base_url="http://ollama:11434", n
 async def warmup():
     try:
         llm_chat.invoke("Hi")
-        logger.info("✅ Sistema Multi-Agente (Analista, Extractor, Validador) activo.")
+        logger.info("Sistema Multi-Agente (Analista, Extractor, Validador) activo.")
     except: pass
 
 INTERNAL_TOKEN = os.getenv("INTERNAL_API_KEY", "super-secret-key-123")
@@ -120,10 +120,10 @@ async def run_heavy_processing(contract_id: str, s3_key: str, filename: str):
                 json={"status": "completed", "extracted_data": json.dumps(final_json)},
                 headers={"X-Internal-Token": INTERNAL_TOKEN}
             )
-            logger.info(f"✅ Proceso verificado finalizado: {contract_id}")
+            logger.info(f"Proceso verificado finalizado: {contract_id}")
 
         except Exception as e:
-            logger.error(f"💥 Error: {str(e)}")
+            logger.error(f"Error: {str(e)}")
             await client.patch(f"{BACKEND_URL}/contracts/{contract_id}", json={"status": "error", "error_detail": str(e)}, headers={"X-Internal-Token": INTERNAL_TOKEN})
 
 @app.post("/process")
@@ -147,6 +147,7 @@ async def query_stream(req: ChatRequest):
         f"HISTORIAL:\n{history}\n"
         f"PREGUNTA: {req.question}\n"
         f"Dato clave: Prioriza la MEMORIA GLOBAL para estadísticas."
+        f"Sinceridad: Si no sabes, di 'No tengo esa información'."
     )
     async def generate():
         async for chunk in llm_chat.astream(full_prompt): yield chunk

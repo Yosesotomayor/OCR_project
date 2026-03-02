@@ -22,21 +22,18 @@ from .security import (
     get_current_active_user, get_current_admin_user, validate_internal_token,
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
-from .models import Contract, User
+from .models import Contract, User, Chat, ChatMessage
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="LeaseLens API Gateway")
 
+# CORS
 origins = ["*"]
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"]
+    CORSMiddleware, allow_origins=origins, allow_credentials=True, 
+    allow_methods=["*"], allow_headers=["*"], expose_headers=["*"]
 )
 
 s3 = S3Manager()
@@ -53,11 +50,24 @@ def clean_numeric(value):
         return float(clean_str)
     except: return None
 
-# --- MODELOS ---
+# --- MODELS ---
 class ChatRequest(BaseModel):
     question: str
     history: Optional[List[dict]] = []
     portfolio_summary: Optional[str] = None
+    chat_id: Optional[str] = None
+
+class ChatResponse(BaseModel):
+    id: str
+    title: str
+    created_at: datetime
+    class Config: from_attributes = True
+
+class MessageResponse(BaseModel):
+    role: str
+    content: str
+    timestamp: datetime
+    class Config: from_attributes = True
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -97,7 +107,7 @@ class ContractSchema(BaseModel):
 @app.post("/register", response_model=UserResponse)
 async def register_user(user: UserLogin, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.email == user.email).first()
-    if db_user: raise HTTPException(status_code=400, detail="Email ya registrado")
+    if db_user: raise HTTPException(400, "Email ya registrado")
     new_user = User(id=str(uuid.uuid4()), email=user.email, hashed_password=get_password_hash(user.password))
     if db.query(User).count() == 0: new_user.is_admin = True
     db.add(new_user); db.commit(); db.refresh(new_user)
@@ -107,13 +117,40 @@ async def register_user(user: UserLogin, db: Session = Depends(get_db)):
 async def login(data: UserLogin, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == data.email).first()
     if not user or not verify_password(data.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+        raise HTTPException(401, "Credenciales incorrectas")
     return {"access_token": create_access_token(data={"sub": user.email}), "token_type": "bearer"}
 
 @app.get("/users/me", response_model=UserResponse)
 async def me(current: User = Depends(get_current_active_user)): return current
 
-# --- CONTRATOS ---
+# --- CHATS ---
+@app.get("/chats", response_model=List[ChatResponse])
+async def list_chats(db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
+    return db.query(Chat).filter(Chat.user_id == current.id).order_by(Chat.created_at.desc()).all()
+
+@app.get("/chats/{chat_id}/messages", response_model=List[MessageResponse])
+async def get_chat_messages(chat_id: str, db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
+    chat = db.query(Chat).filter(Chat.id == chat_id, Chat.user_id == current.id).first()
+    if not chat: raise HTTPException(404)
+    return chat.messages
+
+class ChatUpdateTitle(BaseModel):
+    title: str
+
+@app.patch("/chats/{chat_id}", status_code=200)
+async def update_chat_title(chat_id: str, data: ChatUpdateTitle, db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
+    chat = db.query(Chat).filter(Chat.id == chat_id, Chat.user_id == current.id).first()
+    if not chat: raise HTTPException(404)
+    chat.title = data.title
+    db.commit()
+    return {"status": "ok"}
+
+@app.delete("/chats/{chat_id}", status_code=204)
+async def delete_chat(chat_id: str, db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
+    chat = db.query(Chat).filter(Chat.id == chat_id, Chat.user_id == current.id).first()
+    if chat: db.delete(chat); db.commit()
+
+# --- CONTRACTS ---
 @app.get("/contracts", response_model=List[ContractSchema])
 async def list_contracts(db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
     return db.query(Contract).all()
@@ -121,37 +158,34 @@ async def list_contracts(db: Session = Depends(get_db), current: User = Depends(
 @app.get("/contracts/{contract_id}/status")
 async def get_contract_status(contract_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     db_contract = db.query(Contract).filter(Contract.id == contract_id).first()
-    if not db_contract: raise HTTPException(status_code=404)
+    if not db_contract: raise HTTPException(404)
     return {"status": db_contract.status, "error_detail": db_contract.error_detail}
 
 @app.get("/contracts/{contract_id}/presigned_url")
 async def get_url(contract_id: str, db: Session = Depends(get_db)):
     contract = db.query(Contract).filter(Contract.id == contract_id).first()
-    if not contract: raise HTTPException(status_code=404)
+    if not contract: raise HTTPException(404)
     url = s3.generate_presigned_url(contract.s3_key)
-    if not url: raise HTTPException(status_code=500)
+    if not url: raise HTTPException(500, "Error generating URL")
     return {"presigned_url": url}
 
 @app.post("/upload")
 async def upload(file: UploadFile = File(...), db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
     cid = str(uuid.uuid4())
-    try:
-        content = await file.read()
-        key = f"contracts/{cid}/{file.filename}"
-        s3.upload_file(content, key)
-        db_contract = Contract(id=cid, filename=file.filename, s3_key=key, status="processing")
-        db.add(db_contract); db.commit()
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            try: await client.post(f"{ML_SERVICE_URL}/process", json={"contract_id": cid, "s3_key": key, "filename": file.filename})
-            except: logger.error(f"Fallo conectar ML Service para {cid}")
-        return {"contract_id": cid, "status": "processing"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    content = await file.read()
+    key = f"contracts/{cid}/{file.filename}"
+    s3.upload_file(content, key)
+    contract = Contract(id=cid, filename=file.filename, s3_key=key, status="processing")
+    db.add(contract); db.commit()
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try: await client.post(f"{ML_SERVICE_URL}/process", json={"contract_id": cid, "s3_key": key, "filename": file.filename})
+        except: logger.error(f"Fallo conectar ML Service para {cid}")
+    return {"contract_id": cid, "status": "processing"}
 
 @app.patch("/contracts/{contract_id}", dependencies=[Depends(validate_internal_token)])
 async def update_ml(contract_id: str, update: ContractUpdate, db: Session = Depends(get_db)):
     db_contract = db.query(Contract).filter(Contract.id == contract_id).first()
-    if not db_contract: raise HTTPException(status_code=404)
+    if not db_contract: raise HTTPException(404)
     db_contract.status = update.status
     db_contract.error_detail = update.error_detail
     if update.extracted_data:
@@ -176,7 +210,7 @@ async def exists(contract_id: str, db: Session = Depends(get_db)):
 @app.delete("/admin/contracts/{contract_id}", status_code=204)
 async def delete_contract(contract_id: str, db: Session = Depends(get_db), current: User = Depends(get_current_admin_user)):
     contract = db.query(Contract).filter(Contract.id == contract_id).first()
-    if not contract: raise HTTPException(status_code=404)
+    if not contract: raise HTTPException(404)
     s3.delete_file(contract.s3_key)
     try:
         async with httpx.AsyncClient() as client:
@@ -184,6 +218,7 @@ async def delete_contract(contract_id: str, db: Session = Depends(get_db), curre
     except: pass
     db.delete(contract); db.commit()
 
+# --- ANALYTICS ---
 @app.get("/analytics/summary")
 async def get_analytics_summary(db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
     now = datetime.now()
@@ -197,23 +232,41 @@ async def get_analytics_summary(db: Session = Depends(get_db), current: User = D
         "upcoming_expirations": exp30, "compliance_score": round(100 - (errors/total*100), 1) if total > 0 else 100, "error_count": errors
     }
 
+# --- STREAMING CHAT ---
 @app.post("/chat/stream")
-async def chat(req: ChatRequest, db: Session = Depends(get_db)):
+async def chat(req: ChatRequest, db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
+    if not req.chat_id:
+        chat_id = str(uuid.uuid4())
+        new_chat = Chat(id=chat_id, title=req.question[:30] + "...", user_id=current.id)
+        db.add(new_chat); db.commit()
+    else: chat_id = req.chat_id
+
+    db.add(ChatMessage(id=str(uuid.uuid4()), chat_id=chat_id, role="user", content=req.question))
+    db.commit()
+
     contracts = db.query(Contract).all()
     total_mrr = sum([c.monthly_rent for c in contracts if c.monthly_rent and c.status == "completed"])
-    summary = f"PORTAFOLIO LEGAL:\n- Contratos: {len(contracts)}\n- MRR Total: {total_mrr} MXN\n- Detalle:\n"
-    for c in contracts:
-        summary += f"  * [{c.filename}] {c.tenant_name or 'N/A'}, Renta: {c.monthly_rent or 0} {c.currency or 'MXN'}, Status: {c.status}\n"
+    summary = f"SISTEMA LEGAL:\n- Contratos: {len(contracts)}\n- MRR: {total_mrr}\n"
+    for c in contracts: summary += f"* [{c.filename}] {c.tenant_name}, Renta: {c.monthly_rent}\n"
     req.portfolio_summary = summary
-    async def stream():
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            try:
-                async with client.stream("POST", f"{ML_SERVICE_URL}/query-stream", json=req.dict(), headers={"X-Internal-Token": INTERNAL_TOKEN}) as r:
-                    if r.status_code != 200: yield "Servicio ocupado.".encode("utf-8"); return
-                    async for chunk in r.aiter_bytes(): yield chunk
-            except: yield "Timeout GPU.".encode("utf-8")
-    return StreamingResponse(stream(), media_type="text/plain")
 
+    async def stream():
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            try:
+                accumulated = ""
+                async with client.stream("POST", f"{ML_SERVICE_URL}/query-stream", json=req.dict(), headers={"X-Internal-Token": INTERNAL_TOKEN}) as r:
+                    async for chunk in r.aiter_bytes():
+                        accumulated += chunk.decode("utf-8")
+                        yield chunk
+                db.add(ChatMessage(id=str(uuid.uuid4()), chat_id=chat_id, role="assistant", content=accumulated))
+                db.commit()
+            except Exception as e:
+                logger.error(f"Error en stream: {str(e)}")
+                yield "Error de conexion con el motor de IA.".encode("utf-8")
+    
+    return StreamingResponse(stream(), media_type="text/plain", headers={"X-Chat-ID": chat_id})
+
+# --- ADMIN USERS ---
 @app.get("/admin/users", response_model=List[UserResponse])
 async def list_users(db: Session = Depends(get_db), current: User = Depends(get_current_admin_user)):
     return db.query(User).all()

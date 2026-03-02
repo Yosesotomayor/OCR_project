@@ -1,6 +1,7 @@
 import os
 import boto3
 from botocore.exceptions import ClientError
+from botocore.client import Config
 from typing import Optional
 from dotenv import load_dotenv
 
@@ -13,14 +14,14 @@ class S3Manager:
         self.secret_key = os.getenv("MINIO_SECRET_KEY", "una_password_segura_123")
         self.bucket_name = os.getenv("MINIO_BUCKET", "artifacts")
 
-        # Cliente interno para operaciones Docker-to-Docker
+        # Cliente para operaciones internas (Upload/Delete)
         self.s3_client = boto3.client(
             "s3",
             endpoint_url=self.endpoint,
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
             region_name="us-east-1",
-            config=boto3.session.Config(signature_version='s3v4')
+            config=Config(signature_version='s3v4', s3={'addressing_style': 'path'})
         )
 
     def upload_file(self, file_content: bytes, object_name: str) -> bool:
@@ -37,19 +38,22 @@ class S3Manager:
             return False
 
     def generate_presigned_url(self, object_name: str, expires_in: int = 3600) -> Optional[str]:
+        """
+        Genera una URL firmada. Para evitar SignatureDoesNotMatch en Docker,
+        firmamos con el endpoint que el navegador usará (localhost:9000).
+        """
         try:
-            # Creamos un cliente temporal con 'localhost' para que la firma coincida con lo que el navegador usa
-            # Esto evita el error SignatureDoesNotMatch
-            public_s3 = boto3.client(
+            # Cliente de firma 'externo'
+            signing_client = boto3.client(
                 "s3",
                 endpoint_url="http://localhost:9000",
                 aws_access_key_id=self.access_key,
                 aws_secret_access_key=self.secret_key,
                 region_name="us-east-1",
-                config=boto3.session.Config(signature_version='s3v4')
+                config=Config(signature_version='s3v4', s3={'addressing_style': 'path'})
             )
             
-            url = public_s3.generate_presigned_url(
+            url = signing_client.generate_presigned_url(
                 'get_object',
                 Params={
                     'Bucket': self.bucket_name, 
@@ -60,7 +64,8 @@ class S3Manager:
                 ExpiresIn=expires_in
             )
             return url
-        except Exception:
+        except Exception as e:
+            print(f"Error generando presigned URL: {e}")
             return None
 
     def delete_file(self, object_name: str) -> bool:
