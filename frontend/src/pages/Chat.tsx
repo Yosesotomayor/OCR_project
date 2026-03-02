@@ -181,18 +181,16 @@ export default function Chat() {
       </motion.aside>
 
       {/* CONVERSACIÓN ACTIVA */}
-      <main className="flex-1 flex flex-col relative overflow-hidden">
-        <div className="flex-1">
-          <ChatContainer 
-            messages={messages} 
-            setMessages={setMessages} 
-            isThinking={isThinking} 
-            setIsThinking={setIsThinking}
-            activeChatId={activeChatId}
-            setActiveChatId={setActiveChatId}
-            onSessionCreated={fetchSessions}
-          />
-        </div>
+      <main className="flex-1 flex flex-col relative min-w-0 h-full overflow-hidden">
+        <ChatContainer 
+          messages={messages} 
+          setMessages={setMessages} 
+          isThinking={isThinking} 
+          setIsThinking={setIsThinking}
+          activeChatId={activeChatId}
+          setActiveChatId={setActiveChatId}
+          onSessionCreated={fetchSessions}
+        />
       </main>
     </div>
   );

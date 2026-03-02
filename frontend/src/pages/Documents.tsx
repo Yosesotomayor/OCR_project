@@ -192,7 +192,17 @@ export default function Documents() {
               </div>
               <div className="flex-1 flex overflow-hidden">
                 <div className="flex-[2] bg-[#141414] p-6 relative border-r border-white/5">
-                  {previewUrl ? <iframe src={`${previewUrl}#toolbar=0`} className="w-full h-full rounded-2xl border border-white/5 shadow-inner" /> : <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 gap-4"><Loader2 className="animate-spin text-accent-electric w-10 h-10"/><p className="text-xs font-black uppercase tracking-widest">Cargando visor seguro...</p></div>}
+                  {previewUrl ? (
+                    <iframe 
+                      src={`${previewUrl}#toolbar=0`} 
+                      className="w-full h-full rounded-2xl border border-white/5 shadow-inner" 
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 gap-4">
+                      <Loader2 className="animate-spin text-accent-electric w-10 h-10"/>
+                      <p className="text-xs font-black uppercase tracking-widest">Cargando visor seguro...</p>
+                    </div>
+                  )}
                 </div>
                 <div className="flex-1 bg-[#0a0a0a] p-10 space-y-10 overflow-y-auto">
                   <h4 className="text-[10px] font-black uppercase tracking-[0.4em] text-accent-electric flex items-center gap-2"><ShieldCheck size={14}/> Análisis Legal IA</h4>

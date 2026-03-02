@@ -183,12 +183,14 @@ async def upload(file: UploadFile = File(...), db: Session = Depends(get_db), cu
 
 @app.patch("/contracts/{contract_id}", dependencies=[Depends(validate_internal_token)])
 async def update_ml(contract_id: str, update: ContractUpdate, db: Session = Depends(get_db)):
+    logger.info(f"📥 PATCH recibido para {contract_id}. Status: {update.status}")
     db_contract = db.query(Contract).filter(Contract.id == contract_id).first()
     if not db_contract: raise HTTPException(404)
     db_contract.status = update.status
-    if update.progress is not None: db_contract.progress = update.progress
     db_contract.error_detail = update.error_detail
+
     if update.extracted_data:
+        logger.info(f"✨ Data extraida: {update.extracted_data}")
         try:
             data = json.loads(update.extracted_data)
             db_contract.tenant_name = data.get("arrendatario")
@@ -196,11 +198,18 @@ async def update_ml(contract_id: str, update: ContractUpdate, db: Session = Depe
             db_contract.currency = data.get("moneda")
             db_contract.property_name = data.get("nombre_propiedad")
             db_contract.property_zone = data.get("zona_propiedad")
+
+            logger.info(f"✅ Campos asignados: Rent={db_contract.monthly_rent}, Zone={db_contract.property_zone}")
+
             if data.get("fecha_vencimiento"):
                 try: db_contract.expiry_date = datetime.strptime(data["fecha_vencimiento"], "%Y-%m-%d").date()
                 except: pass
-        except: pass
-    db.commit(); return {"status": "ok"}
+        except Exception as e:
+            logger.error(f"❌ Error procesando JSON: {str(e)}")
+
+    db.commit()
+    return {"status": "ok"}
+
 
 @app.get("/contracts/{contract_id}/exists", dependencies=[Depends(validate_internal_token)])
 async def exists(contract_id: str, db: Session = Depends(get_db)):
@@ -241,9 +250,15 @@ async def chat(req: ChatRequest, db: Session = Depends(get_db), current: User = 
     db.add(ChatMessage(id=str(uuid.uuid4()), chat_id=chat_id, role="user", content=req.question))
     db.commit()
     contracts = db.query(Contract).all()
-    total_mrr = sum([c.monthly_rent for c in contracts if c.monthly_rent and c.status == "completed"])
-    summary = f"SISTEMA LEGAL:\n- Contratos: {len(contracts)}\n- MRR: {total_mrr}\n"
-    for c in contracts: summary += f"* [{c.filename}] {c.tenant_name}, Renta: {c.monthly_rent}\n"
+    total_mrr = sum([float(c.monthly_rent) for c in contracts if c.monthly_rent and c.status == "completed"])
+    
+    summary = f"SISTEMA DE GESTIÓN LEASELENS - DATOS REALES:\n"
+    summary += f"- TOTAL DE CONTRATOS: {len(contracts)}\n"
+    summary += f"- MONTO TOTAL DE RENTAS (MRR): {total_mrr} MXN\n"
+    summary += f"- LISTA DE CONTRATOS Y RENTAS INDIVIDUALES:\n"
+    for c in contracts:
+        summary += f"  * Arrendatario: {c.tenant_name or 'S/I'}, Renta: {float(c.monthly_rent or 0)} {c.currency or 'MXN'}, Estatus: {c.status}\n"
+    
     req.portfolio_summary = summary
     async def stream():
         async with httpx.AsyncClient(timeout=300.0) as client:

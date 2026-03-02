@@ -31,27 +31,25 @@ export default function Dashboard() {
 
   const openPreview = async (contract: ILeaseContract) => {
     setSelectedContract(contract);
-    const res = await fetch(`${API_URL}/contracts/${contract.id}/presigned_url`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    const data = await res.json();
-    setPreviewUrl(data.presigned_url);
+    setPreviewUrl(null);
+    try {
+      const res = await fetch(`${API_URL}/contracts/${contract.id}/presigned_url`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      setPreviewUrl(data.presigned_url);
+    } catch (error) { console.error(error); }
   };
 
   const handleDownload = async (contractId: string, filename: string) => {
-    const res = await fetch(`${API_URL}/contracts/${contractId}/presigned_url`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    const data = await res.json();
-    const a = document.createElement('a'); a.href = data.presigned_url; a.download = filename;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  };
-
-  const handleBulkDownload = () => {
-    selectedIds.forEach(id => {
-      const c = contracts.find(x => x.id === id);
-      if (c) handleDownload(c.id, c.filename);
-    });
+    try {
+      const res = await fetch(`${API_URL}/contracts/${contractId}/presigned_url`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      const a = document.createElement('a'); a.href = data.presigned_url; a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    } catch (error) { console.error(error); }
   };
 
   const formatCurrency = (val: number) => 
@@ -60,7 +58,7 @@ export default function Dashboard() {
   if (isLoading) return <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-accent-electric" /></div>;
 
   return (
-    <div className="p-10 space-y-10 font-sans">
+    <div className="p-10 space-y-10 font-sans h-full overflow-y-auto">
       <header className="flex justify-between items-center">
         <div>
           <h1 className="text-4xl font-black tracking-tighter mb-1">Panel de Control Legal</h1>
@@ -92,7 +90,7 @@ export default function Dashboard() {
           <table className="w-full text-left text-[11px]">
             <thead className="bg-white/2 text-gray-500 font-bold uppercase tracking-[0.2em] border-b border-white/5">
               <tr>
-                <th className="px-6 py-4">Arrendatario / Zona</th>
+                <th className="px-6 py-4">Arrendatario / Propiedad</th>
                 <th className="px-6 py-4">Renta</th>
                 <th className="px-6 py-4">Vencimiento</th>
                 <th className="px-6 py-4">Status</th>
@@ -105,11 +103,11 @@ export default function Dashboard() {
                   <td className="px-6 py-4">
                     <p className="font-bold text-gray-200 text-sm">{c.tenant_name || c.filename}</p>
                     <p className="text-[9px] text-gray-500 flex items-center gap-1 uppercase tracking-wider">
-                      <MapPin size={10} /> {c.property_zone || 'Zona no especificada'}
+                      <MapPin size={10} /> {c.property_name ? `${c.property_name} (${c.property_zone})` : (c.property_zone || 'Zona no especificada')}
                     </p>
                   </td>
                   <td className="px-6 py-4 font-mono text-accent-electric font-bold text-sm">
-                    {c.monthly_rent ? formatCurrency(c.monthly_rent) : 'N/A'}
+                    {c.monthly_rent ? formatCurrency(c.monthly_rent) : '---'}
                   </td>
                   <td className="px-6 py-4 text-gray-400 font-mono italic">{c.expiry_date || 'S/I'}</td>
                   <td className="px-6 py-4">
@@ -177,20 +175,12 @@ export default function Dashboard() {
                       </div>
                       <div className="p-5 bg-white/2 border border-white/5 rounded-2xl flex items-center gap-5 hover:bg-white/5 transition-all">
                         <DollarSign size={20} className="text-gray-500" />
-                        <div><p className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-1">Monto Mensual</p><p className="text-lg font-black text-accent-electric font-mono">{formatCurrency(selectedContract.monthly_rent || 0)} {selectedContract.currency}</p></div>
+                        <div><p className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-1">Monto Mensual</p><p className="text-lg font-black text-accent-electric font-mono">{selectedContract.monthly_rent ? formatCurrency(selectedContract.monthly_rent) : '---'} {selectedContract.currency}</p></div>
                       </div>
                       <div className="p-5 bg-white/2 border border-white/5 rounded-2xl flex items-center gap-5 hover:bg-white/5 transition-all">
                         <MapPin size={20} className="text-gray-500" />
-                        <div><p className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-1">Zona Propiedad</p><p className="text-base font-bold text-white">{selectedContract.property_zone || 'Zona no detectada'}</p></div>
+                        <div><p className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-1">Propiedad / Zona</p><p className="text-base font-bold text-white">{selectedContract.property_name ? `${selectedContract.property_name} (${selectedContract.property_zone})` : (selectedContract.property_zone || 'No detectada')}</p></div>
                       </div>
-                    </div>
-                  </section>
-
-                  <section className="space-y-6">
-                    <h4 className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-600 italic">Cronología Legal</h4>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="p-4 bg-white/2 border border-white/5 rounded-2xl"><p className="text-[9px] text-gray-600 uppercase font-black tracking-widest mb-1">Expiración</p><p className="text-sm font-mono text-white">{selectedContract.expiry_date || 'N/A'}</p></div>
-                      <div className="p-4 bg-white/2 border border-white/5 rounded-2xl"><p className="text-[9px] text-gray-600 uppercase font-black tracking-widest mb-1">Confianza</p><p className="text-sm font-mono text-emerald-500 font-bold">98.4%</p></div>
                     </div>
                   </section>
 
@@ -199,7 +189,7 @@ export default function Dashboard() {
                       onClick={() => handleDownload(selectedContract.id, selectedContract.filename)}
                       className="w-full bg-accent-electric text-black py-5 rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-3 hover:bg-white hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_0_30px_rgba(0,240,255,0.2)]"
                     >
-                      <Download size={18} /> Descargar Contrato Original
+                      <Download size={18} /> Descargar PDF Original
                     </button>
                   </div>
                 </div>
