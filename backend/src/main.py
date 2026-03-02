@@ -243,10 +243,34 @@ async def get_analytics_summary(db: Session = Depends(get_db), current: User = D
     exp30 = db.query(Contract).filter(Contract.expiry_date <= now + timedelta(days=30), Contract.expiry_date >= now, Contract.status == "completed").count()
     total = db.query(Contract).count()
     errors = db.query(Contract).filter(Contract.status == "error").count()
+    
+    # Datos para Gráfica de Ingresos por Zona
+    revenue_by_zone = db.query(
+        Contract.property_zone, 
+        func.sum(Contract.monthly_rent).label("value")
+    ).filter(Contract.status == "completed").group_by(Contract.property_zone).all()
+    
+    # Datos para Distribución de Vencimientos (Próximos 12 meses)
+    expirations_dist = []
+    for i in range(12):
+        month_start = (now + timedelta(days=30*i)).replace(day=1)
+        next_month = (month_start + timedelta(days=32)).replace(day=1)
+        count = db.query(Contract).filter(
+            Contract.expiry_date >= month_start,
+            Contract.expiry_date < next_month,
+            Contract.status == "completed"
+        ).count()
+        expirations_dist.append({"month": month_start.strftime("%b %y"), "count": count})
+
     return {
-        "total_mrr": float(mrr), "active_contracts": db.query(Contract).filter(Contract.status == "completed").count(),
+        "total_mrr": float(mrr), 
+        "active_contracts": db.query(Contract).filter(Contract.status == "completed").count(),
         "pending_extractions": db.query(Contract).filter(Contract.status == "processing").count(),
-        "upcoming_expirations": exp30, "compliance_score": round(100 - (errors/total*100), 1) if total > 0 else 100, "error_count": errors
+        "upcoming_expirations": exp30, 
+        "compliance_score": round(100 - (errors/total*100), 1) if total > 0 else 100, 
+        "error_count": errors,
+        "revenue_by_zone": [{"name": r[0] or "Otras", "value": float(r[1] or 0)} for r in revenue_by_zone],
+        "expirations_timeline": expirations_dist
     }
 
 # --- STREAMING CHAT ---
