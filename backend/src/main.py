@@ -364,10 +364,36 @@ async def delete_user(user_id: str, db: Session = Depends(get_db), current: User
 async def update_ml(contract_id: str, update: ContractUpdate, db: Session = Depends(get_db)):
     c = db.query(Contract).filter(Contract.id == contract_id).first()
     if not c: raise HTTPException(404)
+    
+    # Actualización de estado básico
     c.status = update.status
-    if update.progress: c.progress = update.progress
+    if update.progress is not None: 
+        c.progress = update.progress
+    if update.error_detail:
+        c.error_detail = update.error_detail
+    
+    # Procesar extracción IA
     if update.extracted_data:
-        data = json.loads(update.extracted_data)
-        c.tenant_name = data.get("arrendatario")
-        c.monthly_rent = clean_numeric(data.get("monto_renta"))
-    db.commit(); return {"ok": True}
+        try:
+            data = json.loads(update.extracted_data)
+            c.tenant_name = data.get("arrendatario")
+            c.monthly_rent = clean_numeric(data.get("monto_renta"))
+            c.currency = data.get("moneda")
+            c.property_name = data.get("nombre_propiedad")
+            c.property_zone = data.get("zona_propiedad")
+            
+            # Parseo robusto de fechas (YYYY-MM-DD)
+            for date_field in ["fecha_inicio", "fecha_vencimiento"]:
+                val = data.get(date_field)
+                if val and isinstance(val, str):
+                    try:
+                        parsed_date = datetime.strptime(val, "%Y-%m-%d").date()
+                        if date_field == "fecha_inicio": c.start_date = parsed_date
+                        else: c.expiry_date = parsed_date
+                    except:
+                        logger.warning(f"Formato de fecha inválido para {date_field}: {val}")
+        except Exception as e:
+            logger.error(f"Error procesando extracted_data: {e}")
+    
+    db.commit()
+    return {"ok": True}

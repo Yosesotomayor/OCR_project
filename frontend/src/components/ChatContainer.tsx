@@ -112,18 +112,22 @@ export default function ChatContainer({
       </div>
 
       <footer className="px-6 pb-10 pt-4 shrink-0 bg-transparent">
-        <div className="relative bg-white/5 border border-white/10 rounded-3xl p-2 flex items-center gap-3 focus-within:border-accent-electric/30 transition-all shadow-2xl backdrop-blur-md">
+        <div className={cn(
+          "relative bg-white/5 border border-white/10 rounded-3xl p-2 flex items-center gap-3 transition-all shadow-2xl backdrop-blur-md",
+          isThinking ? "opacity-50 grayscale cursor-not-allowed border-white/5" : "focus-within:border-accent-electric/30"
+        )}>
           <textarea
             rows={1} value={input}
+            disabled={isThinking}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }}}
-            placeholder="Pregunta sobre tu portafolio legal..."
-            className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-gray-200 py-3 px-4 text-sm resize-none shadow-none"
+            placeholder={isThinking ? "IA procesando reporte..." : "Pregunta sobre tu portafolio legal..."}
+            className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-gray-200 py-3 px-4 text-sm resize-none shadow-none disabled:cursor-not-allowed"
           />
           <button 
             onClick={() => handleSend()} 
             disabled={isThinking || !input.trim()}
-            className="p-4 bg-accent-electric text-black rounded-2xl hover:scale-105 active:scale-95 transition-all shadow-lg disabled:opacity-50 disabled:grayscale"
+            className="p-4 bg-accent-electric text-black rounded-2xl hover:scale-105 active:scale-95 transition-all shadow-lg disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed"
           >
             {isThinking ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
           </button>
