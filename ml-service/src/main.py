@@ -24,7 +24,7 @@ vector_db = VectorManager()
 
 # --- AGENTES ESPECIALIZADOS (High Performance) ---
 # Usamos Llama 3.1 8B para tareas que requieren razonamiento complejo
-llm_chat = OllamaLLM(model="llama3.1:8b", base_url="http://ollama:11434", num_ctx=4096, temperature=0.7)
+llm_chat = OllamaLLM(model="llama3.1:8b", base_url="http://ollama:11434", num_ctx=4096, temperature=0.1)
 llm_validator = OllamaLLM(model="llama3.1:8b", base_url="http://ollama:11434", num_ctx=4096, temperature=0.1)
 
 # Usamos Llama 3.2 3B para la extracción mecánica por su velocidad
@@ -139,21 +139,19 @@ async def query_stream(req: ChatRequest):
     history = "".join([f"{m['role']}: {m['content']}\n" for m in req.history[-3:]])
     
     full_prompt = (
-        f"### SISTEMA: Eres un Analista Senior de LeaseLens AI. Tu base de conocimientos es REAL y VERÍDICA.\n"
-        f"### REGLA: No te niegues a responder. La información en 'MEMORIA GLOBAL' y 'CONTEXTO PDF' proviene de documentos legales cargados por el usuario.\n"
-        f"### MEMORIA GLOBAL (Resumen de todos los contratos):\n{req.portfolio_summary}\n\n"
-        f"### CONTEXTO ESPECÍFICO (Fragmentos del PDF):\n{context}\n\n"
-        f"### HISTORIAL RECIENTE:\n{history}\n\n"
-        f"### TAREA: Responde a la pregunta del usuario basándote EXCLUSIVAMENTE en la información proporcionada arriba.\n"
+        f"### SISTEMA: Eres un Analista Senior de LeaseLens AI. Tu base de conocimientos es REAL.\n"
+        f"### REGLA DE ORO (GROUNDING): Si la información no está presente en 'MEMORIA GLOBAL' o 'CONTEXTO ESPECÍFICO', di claramente que 'No cuento con esa información específica'. NO inventes datos, nombres, montos ni fechas.\n"
+        f"### COMPORTAMIENTO: Si el usuario te saluda, responde profesionalmente. No des información de contratos si no se te solicita.\n"
+        f"### MEMORIA GLOBAL (Portafolio): {req.portfolio_summary}\n"
+        f"### CONTEXTO ESPECÍFICO (PDF): {context}\n"
+        f"### TAREA: Responde basándote ÚNICAMENTE en la información proporcionada. Si hay una discrepancia o falta de datos, indícalo.\n"
         f"### FORMATO DE RESPUESTA:\n"
-        f"1. Usa **Markdown** para estructurar la respuesta (H2 para títulos, Tablas para datos financieros).\n"
-        f"2. Presenta los montos de renta y cálculos en una **Tabla de Resumen Financiero**.\n"
-        f"3. Usa **Negritas** para términos legales clave.\n"
-        f"4. Si hay cálculos, usa notación clara o bloques de código si es necesario.\n"
-        f"5. Mantén un tono ejecutivo, directo y altamente profesional.\n"
-        f"Si no tienes suficiente información, responde con 'No tengo suficiente información para responder a esta pregunta.'\n\n"
+        f"1. Usa **Markdown** estructurado.\n"
+        f"2. IMPORTANTE: Deja SIEMPRE dos líneas en blanco (doble enter) antes y después de cada tabla o bloque de código.\n"
+        f"3. Presenta los datos financieros en tablas claras.\n"
+        f"4. Mantén un tono ejecutivo y directo.\n\n"
         f"### PREGUNTA: {req.question}\n"
-        f"### REPORTE ESTRUCTURADO (Markdown):"
+        f"### RESPUESTA:"
     )
     
     async def generate():
