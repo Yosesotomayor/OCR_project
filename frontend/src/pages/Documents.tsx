@@ -157,6 +157,18 @@ export default function Documents() {
     });
   }, [contracts, searchTerm, filterStatus]);
 
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const allIds = filteredContracts.map(c => c.id);
+      setSelectedIds(allIds);
+    } else {
+      setSelectedIds([]);
+    }
+  };
+
+  const isAllSelected = filteredContracts.length > 0 && selectedIds.length === filteredContracts.length;
+  const isPartialSelected = selectedIds.length > 0 && selectedIds.length < filteredContracts.length;
+
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(val);
 
@@ -224,7 +236,15 @@ export default function Documents() {
           <table className="w-full text-left text-[11px]">
             <thead className="sticky top-0 bg-[#0d0d0d] text-gray-500 font-black uppercase tracking-[0.2em] border-b border-white/5 z-10">
               <tr>
-                <th className="px-8 py-5 w-10"></th>
+                <th className="px-8 py-5 w-10 text-center">
+                  <input 
+                    type="checkbox" 
+                    checked={isAllSelected}
+                    ref={el => el && (el.indeterminate = isPartialSelected)}
+                    onChange={(e) => handleSelectAll(e.target.checked)}
+                    className="accent-accent-electric w-4 h-4 cursor-pointer"
+                  />
+                </th>
                 <th className="px-8 py-5">Documento</th>
                 <th className="px-8 py-5">Estatus IA</th>
                 <th className="px-8 py-5">Renta Mensual</th>

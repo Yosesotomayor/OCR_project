@@ -11,38 +11,37 @@ import fitz # PyMuPDF for converting PDF to image
 reader = easyocr.Reader(['es', 'en'], gpu=True) # Assuming GPU is available in ML service
 
 def extract_text_from_pdf(file_content: bytes) -> str:
-    """Extrae texto de un PDF en memoria, usando OCR si es necesario."""
+    """
+    Extrae texto preservando la estructura visual para facilitar el Chunking Semántico.
+    Usa OCR solo si el texto nativo es insuficiente.
+    """
     full_text = ""
     try:
-        # 1. Intentar extracción de texto nativa con pypdf
-        reader_pypdf = PdfReader(io.BytesIO(file_content))
-        for page in reader_pypdf.pages:
-            text = page.extract_text()
-            if text:
-                full_text += text + "\n"
-        
-        if full_text.strip():
-            return full_text # Si se encontró texto, devolverlo
-        
-        # 2. Si no se encontró texto, intentar OCR con EasyOCR
-        # Usar PyMuPDF para convertir páginas de PDF a imágenes
+        # 1. Extracción Nativa con PyMuPDF (Mejor que pypdf para layout)
         doc = fitz.open(stream=file_content, filetype="pdf")
-        ocr_text = ""
-        for page_num in range(len(doc)):
-            page = doc.load_page(page_num)
-            pix = page.get_pixmap()
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            
-            # Convert PIL Image to numpy array for EasyOCR
-            img_np = np.array(img)
-            
-            results = reader.readtext(img_np, detail=0) # detail=0 returns only text
-            ocr_text += " ".join(results) + "\n"
-        
-        if ocr_text.strip():
-            return ocr_text
-        else:
-            return "ERROR: No se pudo extraer texto del PDF (ni nativo ni con OCR)."
-            
+
+        for page in doc:
+            # Obtener texto con estructura de bloques
+            text = page.get_text("text") 
+            if text.strip():
+                full_text += f"--- PÁGINA {page.number + 1} ---\n{text}\n"
+
+        # 2. Si el texto es muy pobre (< 50 caracteres por página), usar OCR
+        if len(full_text) < 50 * len(doc):
+            print("⚠️ Texto nativo insuficiente. Activando OCR de GPU...")
+            full_text = "" # Reiniciar
+            for page_num in range(len(doc)):
+                page = doc.load_page(page_num)
+                pix = page.get_pixmap()
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                img_np = np.array(img)
+
+                # EasyOCR con detalle para reconstruir líneas
+                results = reader.readtext(img_np, detail=0, paragraph=True)
+                page_text = "\n".join(results)
+                full_text += f"--- PÁGINA {page_num + 1} (OCR) ---\n{page_text}\n"
+
+        return full_text
+
     except Exception as e:
-        return f"Error procesando PDF (con OCR): {str(e)}"
+        return f"ERROR CRÍTICO EN PARSER: {str(e)}"

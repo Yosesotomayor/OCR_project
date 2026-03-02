@@ -14,7 +14,6 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 import httpx
 import json
 
-# Configurar logging detallado
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -23,25 +22,20 @@ app = FastAPI(title="LeaseLens ML-Service")
 s3 = S3Manager()
 vector_db = VectorManager()
 
-llm_ready = False
-
-logger.info("🤖 Inicializando modelo Llama 3.1...")
 llm = OllamaLLM(
     model="llama3.1:8b", 
     base_url="http://ollama:11434",
-    num_ctx=2048,
+    num_ctx=4096, # Aumentado para mejor contexto
     stop=["<|eot_id|>"]
 )
-llm_ready = True
 
 @app.on_event("startup")
 async def warmup_llm():
     try:
-        logger.info("🔥 Pre-calentando LLM en VRAM...")
-        llm.invoke("Responde 'ready'")
-        logger.info("✅ LLM listo y caliente.")
-    except Exception as e:
-        logger.error(f"❌ Error en warmup: {e}")
+        logger.info("🔥 Warmup LLM...")
+        llm.invoke("Hi")
+        logger.info("✅ LLM Ready.")
+    except: pass
 
 INTERNAL_TOKEN = os.getenv("INTERNAL_API_KEY", "super-secret-key-123")
 BACKEND_URL = os.getenv("BACKEND_INTERNAL_URL", "http://backend:8000")
@@ -60,114 +54,93 @@ class ChatRequest(BaseModel):
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "llm_ready": llm_ready}
+    return {"status": "ok"}
 
 async def run_heavy_processing(contract_id: str, s3_key: str, filename: str):
-    logger.info(f"⚙️ Iniciando procesamiento pesado para {contract_id} ({filename})")
+    logger.info(f"⚙️ Procesando: {contract_id}")
     async with httpx.AsyncClient(timeout=300.0) as client:
         try:
-            # 1. Validar existencia en backend
-            logger.info(f"🔍 Validando existencia en backend...")
-            check = await client.get(
-                f"{BACKEND_URL}/contracts/{contract_id}/exists",
-                headers={"X-Internal-Token": INTERNAL_TOKEN}
-            )
-            if check.status_code != 200:
-                logger.error(f"❌ Abortando: Backend respondio {check.status_code}")
-                return
+            # 1. Check existence
+            check = await client.get(f"{BACKEND_URL}/contracts/{contract_id}/exists", headers={"X-Internal-Token": INTERNAL_TOKEN})
+            if check.status_code != 200: return
 
-            # 2. Descargar de S3
-            logger.info(f"📥 Descargando archivo de S3: {s3_key}")
+            # 2. S3 Download
             file_bytes = s3.download_file(s3_key)
-            if not file_bytes:
-                logger.error("❌ Fallo descarga de S3")
-                await client.patch(f"{BACKEND_URL}/contracts/{contract_id}", json={"status": "error", "error_detail": "S3 download failed"}, headers={"X-Internal-Token": INTERNAL_TOKEN})
-                return
+            if not file_bytes: return
 
-            # 3. OCR / Extracción
-            logger.info("📄 Extrayendo texto (OCR si es necesario)...")
+            # 3. Smart OCR
             text = extract_text_from_pdf(file_bytes)
-            if text.startswith("ERROR:"):
-                logger.error(f"❌ Error OCR: {text}")
-                await client.patch(f"{BACKEND_URL}/contracts/{contract_id}", json={"status": "error", "error_detail": text}, headers={"X-Internal-Token": INTERNAL_TOKEN})
-                return
             
-            # 4. Vectorización
-            logger.info(f"🧠 Vectorizando {len(text)} caracteres...")
+            # 4. Vectorize
             chunks = splitter.split_text(text)
-            metadatas = [{"doc_id": contract_id, "filename": filename} for _ in chunks]
-            ids = [f"{contract_id}_{i}" for i in range(len(chunks))]
-            vector_db.add_documents(chunks, metadatas, ids)
+            vector_db.add_documents(chunks, [{"doc_id": contract_id} for _ in chunks], [f"{contract_id}_{i}" for i in range(len(chunks))])
 
-            # 5. Extracción Estructurada con LLM (Ultra-Strict & Numeric Cleaning)
-            logger.info("🧠 Invocando LLM para extracción de campos...")
-            prompt = (
-                f"### SISTEMA: Eres un extractor de datos profesional.\n"
-                f"### REGLA: RESPONDE ÚNICAMENTE CON JSON. SIN EXPLICACIONES.\n"
-                f"### INSTRUCCIONES DE CAMPOS:\n"
-                f"- 'monto_renta': DEBE SER UN NÚMERO PURO (ej: 29703.76). Quita '$' y ','.\n"
-                f"- 'moneda': Código ISO (ej: MXN, USD).\n"
-                f"- 'arrendatario': Nombre de la persona o empresa.\n"
-                f"- 'fecha_vencimiento': Formato YYYY-MM-DD o null.\n"
-                f"- 'nombre_propiedad' y 'zona_propiedad': Strings cortos.\n\n"
-                f"### TEXTO DEL CONTRATO:\n{text[:4000]}"
-            )
-            raw_extraction = llm.invoke(prompt)
-            # Limpieza profunda del JSON
-            clean_json = raw_extraction.strip()
-            if "{" in clean_json and "}" in clean_json:
-                clean_json = clean_json[clean_json.find("{"):clean_json.rfind("}")+1]
+            # 5. ESTRATEGIA DE EXTRACCIÓN ROBUSTA
+            pages = text.split("--- PÁGINA")
+            extracted_data = {}
+            target_fields = ["monto_renta", "moneda", "arrendatario", "fecha_vencimiento", "zona_propiedad"]
             
-            logger.info(f"✨ JSON extraído: {clean_json}")
+            for i, page_content in enumerate(pages):
+                if not page_content.strip(): continue
+                if len(extracted_data) >= len(target_fields): break # Optimización
 
-            # 6. Notificar al backend
-            logger.info(f"✅ Finalizado. Notificando éxito al backend...")
+                prompt = (
+                    f"### TAREA: Extrae datos del contrato en este fragmento.\n"
+                    f"### REGLA: RESPONDE SOLO CON JSON. Usa estas llaves exactas:\n"
+                    f"- monto_renta (número puro, ej: 15000.50)\n"
+                    f"- moneda (ISO ej: MXN)\n"
+                    f"- arrendatario (nombre)\n"
+                    f"- fecha_vencimiento (YYYY-MM-DD)\n"
+                    f"- zona_propiedad (string)\n\n"
+                    f"### FRAGMENTO:\n{page_content[:3000]}\n\n"
+                    f"### RESPUESTA (JSON):"
+                )
+                
+                resp = llm.invoke(prompt)
+                try:
+                    clean = resp.strip()
+                    if "{" in clean and "}" in clean:
+                        data = json.loads(clean[clean.find("{"):clean.rfind("}")+1])
+                        for k in target_fields:
+                            if data.get(k) and not extracted_data.get(k):
+                                extracted_data[k] = data[k]
+                except: continue
+
+            # 6. Callback al Backend
             await client.patch(
                 f"{BACKEND_URL}/contracts/{contract_id}",
-                json={"status": "completed", "extracted_data": clean_json},
+                json={"status": "completed", "extracted_data": json.dumps(extracted_data)},
                 headers={"X-Internal-Token": INTERNAL_TOKEN}
             )
+            logger.info(f"✅ Finalizado: {contract_id}")
 
         except Exception as e:
-            logger.error(f"💥 Error en run_heavy_processing: {str(e)}")
-            try:
-                await client.patch(f"{BACKEND_URL}/contracts/{contract_id}", json={"status": "error", "error_detail": str(e)}, headers={"X-Internal-Token": INTERNAL_TOKEN})
-            except: pass
+            logger.error(f"💥 Error: {str(e)}")
+            await client.patch(f"{BACKEND_URL}/contracts/{contract_id}", json={"status": "error", "error_detail": str(e)}, headers={"X-Internal-Token": INTERNAL_TOKEN})
 
 @app.post("/process")
 async def process(req: IngestRequest, background_tasks: BackgroundTasks):
-    logger.info(f"📬 Recibida solicitud de proceso para ID: {req.contract_id}")
     background_tasks.add_task(run_heavy_processing, req.contract_id, req.s3_key, req.filename)
-    return {"message": "Queued", "id": req.contract_id}
+    return {"message": "Queued"}
 
 @app.post("/query-stream")
 async def query_stream(req: ChatRequest):
-    logger.info(f"💬 Consulta recibida: {req.question[:50]}...")
     results = vector_db.search(req.question, n_results=5)
     context = "\n".join(results['documents'][0])
+    history = "".join([f"{m['role']}: {m['content']}\n" for m in req.history[-3:]])
 
-    formatted_history = ""
-    for msg in req.history[-3:]:
-        role = "Usuario" if msg['role'] == 'user' else "Asistente"
-        formatted_history += f"{role}: {msg['content']}\n"
-
-    # INSTRUCCIÓN DE TEXTO PLANO PARA EVITAR MARKDOWN ROTO
     full_prompt = (
-        f"Eres un analista legal experto de LeaseLens AI.\n"
-        f"RESUMEN GLOBAL DEL PORTAFOLIO:\n{req.portfolio_summary}\n\n"
-        f"Historial:\n{formatted_history}\n"
-        f"CONTEXTO ESPECÍFICO:\n{context}\n\n"
-        f"IMPORTANTE: Responde de forma profesional usando ÚNICAMENTE texto plano. No uses negritas (**), numerales (#) ni Markdown.\n"
-        f"Pregunta: {req.question}"
+        f"Analista Legal. Responde profesional en texto plano (sin markdown).\n"
+        f"PORTAFOLIO:\n{req.portfolio_summary}\n\n"
+        f"CONTEXTO:\n{context}\n\n"
+        f"HISTORIAL:\n{history}\n"
+        f"PREGUNTA: {req.question}"
     )
 
     async def generate():
-        async for chunk in llm.astream(full_prompt):
-            yield chunk
-
+        async for chunk in llm.astream(full_prompt): yield chunk
     return StreamingResponse(generate(), media_type="text/plain")
 
-@app.delete("/delete-vectors/{contract_id}", status_code=status.HTTP_204_NO_CONTENT)
+@app.delete("/delete-vectors/{contract_id}", status_code=204)
 async def delete_vectors_from_ml(contract_id: str):
-    logger.info(f"🗑️ Borrando vectores para {contract_id}")
     vector_db.delete_documents(contract_id)
