@@ -31,8 +31,17 @@ llm = OllamaLLM(
     num_ctx=2048,
     stop=["<|eot_id|>"]
 )
-# After LLM initialization, set the flag
 llm_ready = True
+
+@app.on_event("startup")
+async def warmup_llm():
+    try:
+        logger.info("🔥 Pre-calentando LLM en VRAM...")
+        # Una consulta simple para despertar al modelo
+        llm.invoke("Responde 'ready'")
+        logger.info("✅ LLM listo y caliente.")
+    except Exception as e:
+        logger.error(f"❌ Error en warmup: {e}")
 
 INTERNAL_TOKEN = os.getenv("INTERNAL_API_KEY", "super-secret-key-123")
 print(f"ML_SERVICE_INTERNAL_TOKEN loaded: {'*' * len(INTERNAL_TOKEN) if INTERNAL_TOKEN else 'None'}") # Added print statement

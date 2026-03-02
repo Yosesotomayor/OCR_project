@@ -1,46 +1,32 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #050505;
-  --color-card: #0a0a0a;
-  --color-sidebar: #050505;
-  --color-border-subtle: #1f1f1f;
-  --color-accent-electric: #a855f7;
-  --color-accent-electric-hover: #9333ea;
+  --color-accent-electric: #00F0FF;
+  --color-mifel-gold: #C5A059;
+  --font-sans: "Inter", system-ui, sans-serif;
 }
 
-:root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+@layer base {
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
-  color-scheme: dark;
-  color: rgba(255, 255, 255, 0.95);
-  background-color: var(--color-background);
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  :root {
+    background-color: #050505;
+    color: #ffffff;
+  }
+  
+  body {
+    margin: 0;
+    background: #050505;
+    color: #ffffff;
+    min-height: 100vh;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
 }
 
-body {
-  margin: 0;
-  display: flex;
-  place-content: center;
-  min-width: 320px;
-  min-height: 100vh;
-  background-color: var(--color-background);
-}
-
-#root {
-  width: 100%;
-}
-
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;
-}
-.scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+@layer utilities {
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(0, 240, 255, 0.3); }
 }
