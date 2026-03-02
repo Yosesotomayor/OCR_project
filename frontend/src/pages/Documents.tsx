@@ -364,7 +364,7 @@ export default function Documents() {
         <header className="mb-8 flex justify-between items-end shrink-0">
           <div>
             <h1 className="text-4xl font-black tracking-tighter mb-2">Repositorio</h1>
-            <p className="text-gray-500 text-sm">Auditoría inteligente de contratos sobre RTX 4060.</p>
+            <p className="text-gray-500 text-sm">Auditoría inteligente de contratos.</p>
           </div>
           
           <div 
