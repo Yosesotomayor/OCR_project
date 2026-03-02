@@ -113,17 +113,15 @@ async def run_heavy_processing(contract_id: str, s3_key: str, filename: str):
                 f"### TEXTO DEL CONTRATO:\n{text[:4000]}"
             )
             raw_extraction = llm.invoke(prompt)
-
             # Limpieza profunda del JSON
             clean_json = raw_extraction.strip()
             if "{" in clean_json and "}" in clean_json:
                 clean_json = clean_json[clean_json.find("{"):clean_json.rfind("}")+1]
-
+            
             logger.info(f"✨ JSON extraído: {clean_json}")
 
-
             # 6. Notificar al backend
-            logger.info(f"Finalizado. Notificando éxito al backend...")
+            logger.info(f"✅ Finalizado. Notificando éxito al backend...")
             await client.patch(
                 f"{BACKEND_URL}/contracts/{contract_id}",
                 json={"status": "completed", "extracted_data": clean_json},
@@ -131,7 +129,7 @@ async def run_heavy_processing(contract_id: str, s3_key: str, filename: str):
             )
 
         except Exception as e:
-            logger.error(f"Error en run_heavy_processing: {str(e)}")
+            logger.error(f"💥 Error en run_heavy_processing: {str(e)}")
             try:
                 await client.patch(f"{BACKEND_URL}/contracts/{contract_id}", json={"status": "error", "error_detail": str(e)}, headers={"X-Internal-Token": INTERNAL_TOKEN})
             except: pass
@@ -153,12 +151,14 @@ async def query_stream(req: ChatRequest):
         role = "Usuario" if msg['role'] == 'user' else "Asistente"
         formatted_history += f"{role}: {msg['content']}\n"
 
+    # INSTRUCCIÓN DE TEXTO PLANO PARA EVITAR MARKDOWN ROTO
     full_prompt = (
         f"Eres un analista legal experto de LeaseLens AI.\n"
         f"RESUMEN GLOBAL DEL PORTAFOLIO:\n{req.portfolio_summary}\n\n"
         f"Historial:\n{formatted_history}\n"
-        f"CONTEXTO DE CLÁUSULAS:\n{context}\n\n"
-        f"Responde de forma profesional.\nPregunta: {req.question}"
+        f"CONTEXTO ESPECÍFICO:\n{context}\n\n"
+        f"IMPORTANTE: Responde de forma profesional usando ÚNICAMENTE texto plano. No uses negritas (**), numerales (#) ni Markdown.\n"
+        f"Pregunta: {req.question}"
     )
 
     async def generate():

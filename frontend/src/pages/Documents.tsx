@@ -70,6 +70,13 @@ export default function Documents() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const { token } = useAuth();
 
+  const handleBulkDownload = () => {
+    selectedIds.forEach(id => {
+      const c = contracts.find(x => x.id === id);
+      if (c) handleDownload(c.id, c.filename);
+    });
+  };
+
   const fetchContracts = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/contracts`, {
@@ -140,12 +147,24 @@ export default function Documents() {
           <h1 className="text-4xl font-black tracking-tighter mb-2">Repositorio</h1>
           <p className="text-gray-500 text-sm italic">Gestión centralizada de activos legales.</p>
         </div>
-        
-        <div className="relative group p-4 border-2 border-dashed border-white/10 rounded-2xl hover:border-accent-electric/50 transition-all cursor-pointer">
-          <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept=".pdf" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])} disabled={isUploading} />
-          <div className="flex items-center gap-3 text-sm font-bold text-gray-400">
-            {isUploading ? <Loader2 className="animate-spin text-accent-electric" size={20} /> : <FileUp size={20} />}
-            {isUploading ? "Procesando..." : "Subir nuevo contrato"}
+
+        <div className="flex items-center gap-4">
+          {selectedIds.length > 0 && (
+            <motion.button 
+              initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+              onClick={handleBulkDownload}
+              className="bg-accent-electric text-black px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 hover:bg-white transition-all shadow-lg"
+            >
+              <Download size={14} /> DESCARGAR ({selectedIds.length})
+            </motion.button>
+          )}
+          
+          <div className="relative group p-4 border-2 border-dashed border-white/10 rounded-2xl hover:border-accent-electric/50 transition-all cursor-pointer">
+            <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept=".pdf" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])} disabled={isUploading} />
+            <div className="flex items-center gap-3 text-sm font-bold text-gray-400">
+              {isUploading ? <Loader2 className="animate-spin text-accent-electric" size={20} /> : <FileUp size={20} />}
+              {isUploading ? "Procesando..." : "Subir nuevo contrato"}
+            </div>
           </div>
         </div>
       </header>
@@ -168,6 +187,7 @@ export default function Documents() {
           <table className="w-full text-left text-[11px]">
             <thead className="sticky top-0 bg-[#0d0d0d] text-gray-500 font-black uppercase tracking-[0.2em] border-b border-white/5 z-10">
               <tr>
+                <th className="px-8 py-5 w-10"></th>
                 <th className="px-8 py-5">Documento</th>
                 <th className="px-8 py-5">Estatus IA</th>
                 <th className="px-8 py-5">Renta Mensual</th>
@@ -177,7 +197,15 @@ export default function Documents() {
             </thead>
             <tbody className="divide-y divide-white/5">
               {filteredContracts.map((c) => (
-                <tr key={c.id} className="hover:bg-white/[0.02] transition-colors group">
+                <tr key={c.id} className={cn("hover:bg-white/[0.02] transition-colors group", selectedIds.includes(c.id) && "bg-accent-electric/5")}>
+                  <td className="px-8 py-6 text-center">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedIds.includes(c.id)}
+                      onChange={(e) => e.target.checked ? setSelectedIds([...selectedIds, c.id]) : setSelectedIds(selectedIds.filter(x => x !== c.id))}
+                      className="accent-accent-electric w-4 h-4"
+                    />
+                  </td>
                   <td className="px-8 py-6">
                     <p className="font-bold text-gray-200 text-sm truncate max-w-[200px]">{c.tenant_name || c.filename}</p>
                     <p className="text-[10px] text-gray-600 font-mono mt-1">{c.id.split('-')[0]}</p>

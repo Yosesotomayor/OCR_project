@@ -13,7 +13,6 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedContract, setSelectedContract] = useState<ILeaseContract | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const { token } = useAuth();
 
   useEffect(() => {
@@ -67,15 +66,6 @@ export default function Dashboard() {
           <h1 className="text-4xl font-black tracking-tighter mb-1">Panel de Control Legal</h1>
           <p className="text-gray-500 text-sm italic">Gestión proactiva de riesgos y cumplimiento.</p>
         </div>
-        {selectedIds.length > 0 && (
-          <motion.button 
-            initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-            onClick={handleBulkDownload}
-            className="bg-accent-electric text-black px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 hover:bg-white transition-all shadow-lg"
-          >
-            <Download size={14} /> DESCARGAR SELECCIONADOS ({selectedIds.length})
-          </motion.button>
-        )}
       </header>
 
       {/* KPIs Estratégicos */}
@@ -102,7 +92,6 @@ export default function Dashboard() {
           <table className="w-full text-left text-[11px]">
             <thead className="bg-white/2 text-gray-500 font-bold uppercase tracking-[0.2em] border-b border-white/5">
               <tr>
-                <th className="px-6 py-4 w-10"></th>
                 <th className="px-6 py-4">Arrendatario / Zona</th>
                 <th className="px-6 py-4">Renta</th>
                 <th className="px-6 py-4">Vencimiento</th>
@@ -112,15 +101,7 @@ export default function Dashboard() {
             </thead>
             <tbody className="divide-y divide-white/5">
               {contracts.map((c) => (
-                <tr key={c.id} className={cn("hover:bg-white/2 transition-colors", selectedIds.includes(c.id) && "bg-accent-electric/5")}>
-                  <td className="px-6 py-4 text-center">
-                    <input 
-                      type="checkbox" 
-                      checked={selectedIds.includes(c.id)}
-                      onChange={(e) => e.target.checked ? setSelectedIds([...selectedIds, c.id]) : setSelectedIds(selectedIds.filter(x => x !== c.id))}
-                      className="accent-accent-electric w-4 h-4"
-                    />
-                  </td>
+                <tr key={c.id} className="hover:bg-white/2 transition-colors">
                   <td className="px-6 py-4">
                     <p className="font-bold text-gray-200 text-sm">{c.tenant_name || c.filename}</p>
                     <p className="text-[9px] text-gray-500 flex items-center gap-1 uppercase tracking-wider">
