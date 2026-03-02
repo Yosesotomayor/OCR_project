@@ -48,8 +48,26 @@ def clean_numeric(value):
     if value is None: return None
     if isinstance(value, (int, float)): return float(value)
     try:
-        clean_str = re.sub(r'[^\d.]', '', str(value))
-        return float(clean_str)
+        # 1. Limpieza extrema de caracteres no numéricos excepto coma y punto
+        s = re.sub(r'[^0-9,.]', '', str(value))
+        
+        # 2. Si hay múltiples puntos (error común de OCR: 29.703.76)
+        # El último es el decimal, los anteriores son ruido
+        if s.count('.') > 1:
+            parts = s.split('.')
+            s = "".join(parts[:-1]) + "." + parts[-1]
+            
+        # 3. Manejo de comas y puntos
+        if ',' in s:
+            if '.' in s: # Formato 29,703.76
+                s = s.replace(',', '')
+            else: # Solo comas
+                if len(s.split(',')[-1]) == 3: # Probablemente miles: 29,703
+                    s = s.replace(',', '')
+                else: # Probablemente decimal: 29,70
+                    s = s.replace(',', '.')
+                    
+        return float(s)
     except: return None
 
 # --- MODELS ---
@@ -222,15 +240,37 @@ async def get_contract_status(contract_id: str, db: Session = Depends(get_db), c
 
 @app.get("/analytics/summary")
 async def analytics(db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
-    mrr = db.query(func.sum(Contract.monthly_rent)).scalar() or 0
+    now = datetime.now()
+    mrr = db.query(func.sum(Contract.monthly_rent)).filter(Contract.status == "completed").scalar() or 0
     active = db.query(Contract).filter(Contract.status == "completed").count()
-    upcoming = db.query(Contract).count() # Simulación
+    total = db.query(Contract).count()
     
-    # Datos de gráficas (Mock si no hay datos reales suficientes)
+    # 1. Próximos vencimientos (Real)
+    upcoming = db.query(Contract).filter(
+        Contract.expiry_date <= now + timedelta(days=30), 
+        Contract.expiry_date >= now,
+        Contract.status == "completed"
+    ).count()
+    
+    # 2. Distribución por zona (Real)
+    zones = db.query(Contract.property_zone, func.sum(Contract.monthly_rent)).filter(Contract.status == "completed").group_by(Contract.property_zone).all()
+    revenue_by_zone = [{"name": z[0] or "Sin Zona", "value": float(z[1] or 0)} for z in zones]
+
+    # 3. Timeline de vencimientos (Real)
+    expirations_dist = []
+    for i in range(6): # Próximos 6 meses
+        m_start = (now + timedelta(days=30*i)).replace(day=1)
+        m_next = (m_start + timedelta(days=32)).replace(day=1)
+        count = db.query(Contract).filter(Contract.expiry_date >= m_start, Contract.expiry_date < m_next, Contract.status == "completed").count()
+        expirations_dist.append({"month": m_start.strftime("%b %y"), "count": count})
+
     return {
-        "total_mrr": float(mrr), "active_contracts": active, "upcoming_expirations": 0, "compliance_score": 100,
-        "revenue_by_zone": [{"name": "Norte", "value": float(mrr)}],
-        "expirations_timeline": [{"month": "Mar 26", "count": 1}]
+        "total_mrr": float(mrr), 
+        "active_contracts": active, 
+        "upcoming_expirations": upcoming, 
+        "compliance_score": 100 if total == 0 else round((active/total)*100),
+        "revenue_by_zone": revenue_by_zone if revenue_by_zone else [{"name": "Esperando Datos", "value": 0}],
+        "expirations_timeline": expirations_dist
     }
 
 @app.get("/contracts/{contract_id}/presigned_url")
@@ -311,7 +351,6 @@ async def get_system_status(db: Session = Depends(get_db), current: User = Depen
                 agents_status = "OPERATIVO"
             
             # Consultar Ollama directamente para ver modelos en VRAM
-            # (Asumiendo que ollama está accesible desde el backend o via proxy ml)
             ollama_resp = await client.get("http://ollama:11434/api/ps")
             if ollama_resp.status_code == 200:
                 models = ollama_resp.json().get("models", [])

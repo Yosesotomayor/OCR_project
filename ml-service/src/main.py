@@ -80,14 +80,13 @@ async def run_heavy_processing(contract_id: str, s3_key: str):
         input_data = text[:10000]
         prompt = (
             f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n"
-            f"Eres un procesador de texto técnico. Tu tarea es convertir el texto de entrada en un objeto JSON.\n"
-            f"REGLAS:\n"
-            f"1. Responde ÚNICAMENTE con JSON.\n"
-            f"2. Si un dato no está, usa null.\n"
-            f"3. Campos: arrendatario (String), monto_renta (Number), moneda (String), fecha_inicio (YYYY-MM-DD), fecha_vencimiento (YYYY-MM-DD), zona_propiedad (String).\n"
-            f"Ejemplo: {{\"arrendatario\": \"Empresa SA\", \"monto_renta\": 5000.0, ...}}<|eot_id|>\n"
+            f"Eres un experto en extracción de datos de contratos. Tu prioridad es la EXACTITUD.\n"
+            f"REGLAS CRÍTICAS:\n"
+            f"1. MONTO RENTA: Busca el número (ej: $29,703.76) Y compáralo con el texto en paréntesis (ej: VEINTINUEVE MIL SETECIENTOS...). Si hay discrepancia por puntos/comas del OCR, usa el valor que dicte el texto escrito.\n"
+            f"2. FECHAS: Si dice 'a la firma', busca la fecha de firma en el encabezado o al final. Responde siempre en YYYY-MM-DD.\n"
+            f"3. Responde ÚNICAMENTE con JSON.<|eot_id|>\n"
             f"<|start_header_id|>user<|end_header_id|>\n\n"
-            f"TEXTO A PROCESAR:\n{input_data}<|eot_id|>\n"
+            f"TEXTO DEL CONTRATO:\n{input_data}<|eot_id|>\n"
             f"<|start_header_id|>assistant<|end_header_id|>\n\n"
             f"{{"
         )

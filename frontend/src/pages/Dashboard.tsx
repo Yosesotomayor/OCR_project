@@ -4,7 +4,7 @@ import { ILeaseContract } from '../types';
 import { 
   TrendingUp, ShieldCheck, Calendar, Loader2, Download, 
   FileText, X, Eye, MapPin, Building, DollarSign, 
-  ArrowUpRight, Users, Briefcase, Activity
+  ArrowUpRight, Users, Briefcase, Activity, Zap
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -23,6 +23,7 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedContract, setSelectedContract] = useState<ILeaseContract | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const { token } = useAuth();
 
   useEffect(() => {
@@ -39,17 +40,27 @@ export default function Dashboard() {
     if (token) fetchData();
   }, [token]);
 
-  const openPreview = async (contract: ILeaseContract) => {
-    setSelectedContract(contract);
-    setPreviewUrl(null);
-    try {
-      const res = await fetch(`${API_URL}/contracts/${contract.id}/presigned_url`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await res.json();
-      setPreviewUrl(data.presigned_url);
-    } catch (error) { console.error(error); }
-  };
+  useEffect(() => {
+    const fetchPreview = async () => {
+      if (selectedContract && token) {
+        setIsPreviewLoading(true);
+        try {
+          const res = await fetch(`${API_URL}/contracts/${selectedContract.id}/presigned_url`, { 
+            headers: { 'Authorization': `Bearer ${token}` } 
+          });
+          const data = await res.json();
+          setPreviewUrl(data.presigned_url);
+        } catch (err) {
+          console.error('Error fetching preview URL:', err);
+        } finally {
+          setIsPreviewLoading(false);
+        }
+      } else {
+        setPreviewUrl(null);
+      }
+    };
+    fetchPreview();
+  }, [selectedContract, token]);
 
   const handleDownload = async (contractId: string, filename: string) => {
     try {
@@ -223,7 +234,7 @@ export default function Dashboard() {
                     </td>
                     <td className="px-8 py-6 text-right">
                       <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0">
-                        <button onClick={() => openPreview(c)} className="p-3 bg-white/5 hover:bg-white/10 rounded-xl text-gray-400 hover:text-white transition-all border border-white/10"><Eye size={16} /></button>
+                        <button onClick={() => setSelectedContract(c)} className="p-3 bg-white/5 hover:bg-white/10 rounded-xl text-gray-400 hover:text-white transition-all border border-white/10"><Eye size={16} /></button>
                         <button onClick={() => handleDownload(c.id, c.filename)} className="p-3 bg-accent-electric/10 hover:bg-accent-electric text-black rounded-xl transition-all shadow-[0_0_20px_rgba(0,240,255,0.2)]"><Download size={16} /></button>
                       </div>
                     </td>
@@ -250,20 +261,24 @@ export default function Dashboard() {
                     <p className="text-[10px] text-gray-600 font-black uppercase tracking-[0.3em]">Protocolo de Análisis: Secure_View_v4</p>
                   </div>
                 </div>
-                <button onClick={() => {setSelectedContract(null); setPreviewUrl(null);}} className="p-4 hover:bg-white/5 rounded-full transition-all text-gray-500 hover:text-white border border-transparent hover:border-white/10"><X size={28}/></button>
+                <button onClick={() => setSelectedContract(null)} className="p-4 hover:bg-white/5 rounded-full transition-all text-gray-500 hover:text-white border border-transparent hover:border-white/10"><X size={28}/></button>
               </div>
 
               <div className="flex-1 flex overflow-hidden">
                 <div className="flex-[2.5] bg-[#020202] p-8 relative">
-                   {previewUrl ? (
-                    <embed src={previewUrl} type="application/pdf" className="w-full h-full rounded-2xl border border-white/5 shadow-2xl" />
-                  ) : (
+                   {isPreviewLoading ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-700 gap-6">
                       <div className="relative">
                         <Loader2 className="animate-spin text-accent-electric w-16 h-16"/>
                         <Zap className="absolute inset-0 m-auto text-accent-electric w-6 h-6 animate-pulse"/>
                       </div>
                       <p className="text-[10px] font-black uppercase tracking-[0.5em] animate-pulse">Sincronizando Túnel SSL S3...</p>
+                    </div>
+                  ) : previewUrl ? (
+                    <embed src={previewUrl} type="application/pdf" className="w-full h-full rounded-2xl border border-white/5 shadow-2xl" />
+                  ) : (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500">
+                      <p className="text-[10px] font-black uppercase tracking-[0.5em]">Error al generar previsualización.</p>
                     </div>
                   )}
                 </div>

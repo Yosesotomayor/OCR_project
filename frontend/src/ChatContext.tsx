@@ -11,6 +11,7 @@ interface ChatContextType {
   setActiveChatId: (id: string | null) => void;
   sendMessage: (text: string) => Promise<void>;
   loadChat: (chatId: string) => Promise<void>;
+  startNewChat: () => void;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -23,15 +24,32 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [activeChatId, setActiveChatId] = useState<string | null>(localStorage.getItem('last_active_chat_id'));
   const { token } = useAuth();
 
+  // Persistencia automática de activeChatId
+  useEffect(() => {
+    if (activeChatId) {
+      localStorage.setItem('last_active_chat_id', activeChatId);
+    } else {
+      localStorage.removeItem('last_active_chat_id');
+    }
+  }, [activeChatId]);
+
+  const startNewChat = useCallback(() => {
+    setActiveChatId(null);
+    setMessages([]);
+  }, []);
+
   const loadChat = useCallback(async (chatId: string) => {
     if (!token) return;
     setActiveChatId(chatId);
+    setMessages([]); // Limpiar antes de cargar
     try {
-      const res = await fetch(`${API_URL}/chats/${chatId}/messages`, { headers: { 'Authorization': `Bearer ${token}` } });
+      const res = await fetch(`${API_URL}/chats/${chatId}/messages`, { 
+        headers: { 'Authorization': `Bearer ${token}` } 
+      });
       if (res.ok) {
         const history = await res.json();
         setMessages(history.map((m: any) => ({
-          id: Math.random().toString(),
+          id: m.id || Math.random().toString(),
           role: m.role,
           content: m.content,
           timestamp: new Date(m.timestamp).toLocaleTimeString()
@@ -58,7 +76,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: new Date().toLocaleTimeString() }]);
 
     try {
-      // Simulación de pasos para feedback
       const steps = ['Sincronizando con GPU...', 'Consultando Base de Vectores...', 'Analizando Portafolio...', 'Generando Reporte Legal...'];
       let stepIdx = 0;
       const stepInterval = setInterval(() => {
@@ -77,7 +94,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newChatId = response.headers.get("X-Chat-ID");
       if (newChatId && newChatId !== activeChatId) {
         setActiveChatId(newChatId);
-        localStorage.setItem('last_active_chat_id', newChatId);
       }
 
       const reader = response.body?.getReader();
@@ -102,7 +118,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <ChatContext.Provider value={{ messages, setMessages, isThinking, thinkingStep, activeChatId, setActiveChatId, sendMessage, loadChat }}>
+    <ChatContext.Provider value={{ messages, setMessages, isThinking, thinkingStep, activeChatId, setActiveChatId, sendMessage, loadChat, startNewChat }}>
       {children}
     </ChatContext.Provider>
   );

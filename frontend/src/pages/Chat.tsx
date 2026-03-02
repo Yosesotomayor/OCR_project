@@ -26,8 +26,8 @@ export default function Chat() {
 
   const { token } = useAuth();
   const { 
-    messages, setMessages, isThinking, thinkingStep, 
-    activeChatId, setActiveChatId, loadChat 
+    messages, isThinking, thinkingStep, 
+    activeChatId, loadChat, startNewChat 
   } = useChat();
 
   useEffect(() => {
@@ -57,16 +57,13 @@ export default function Chat() {
     } catch (err) { console.error(err); }
   };
 
-  const startNewChat = () => {
-    setActiveChatId(null);
-    setMessages([]);
-    localStorage.removeItem('last_active_chat_id');
-  };
-
   const deleteChat = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm("¿Borrar chat?")) {
-      await fetch(`${API_URL}/chats/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+      await fetch(`${API_URL}/chats/${id}`, { 
+        method: 'DELETE', 
+        headers: { 'Authorization': `Bearer ${token}` } 
+      });
       if (activeChatId === id) startNewChat();
       fetchSessions();
     }
@@ -76,6 +73,7 @@ export default function Chat() {
     if (token) fetchSessions(); 
   }, [token, fetchSessions]);
 
+  // Restaurar chat guardado al inicio
   useEffect(() => {
     const savedId = localStorage.getItem('last_active_chat_id');
     if (savedId && sessions.length > 0 && messages.length === 0 && !activeChatId) {

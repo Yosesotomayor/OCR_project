@@ -116,10 +116,27 @@ export default function Documents() {
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("¿Borrar?")) return;
-    await fetch(`${API_URL}/admin/contracts/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
-    fetchContracts();
+  const handleDelete = async (id: string, silent = false) => {
+    if (!silent && !confirm("¿Confirmar eliminación de este contrato?")) return;
+    try {
+      await fetch(`${API_URL}/admin/contracts/${id}`, { 
+        method: 'DELETE', 
+        headers: { 'Authorization': `Bearer ${token}` } 
+      });
+      if (!silent) fetchContracts();
+    } catch (err) { console.error(err); }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!confirm(`¿Estás seguro de eliminar ${selectedIds.length} contratos? Esta acción no se puede deshacer.`)) return;
+    
+    setIsUploading(true); // Reusamos el estado de carga para mostrar feedback
+    for (const id of selectedIds) {
+      await handleDelete(id, true);
+    }
+    await fetchContracts();
+    setSelectedIds([]);
+    setIsUploading(false);
   };
 
   const toggleSort = (key: keyof ILeaseContract) => {
@@ -142,7 +159,7 @@ export default function Documents() {
       <header className="mb-10 flex justify-between items-end shrink-0">
         <div><h1 className="text-4xl font-black tracking-tighter mb-2">Repositorio</h1><p className="text-gray-500 text-sm italic">Base de datos de contratos inteligentes.</p></div>
         <div className="flex gap-4">
-          {selectedIds.length > 0 && <button onClick={() => selectedIds.forEach(id => handleDelete(id))} className="bg-red-500/10 text-red-500 px-4 py-2 rounded-xl text-xs font-black border border-red-500/20 hover:bg-red-500 transition-all">ELIMINAR ({selectedIds.length})</button>}
+          {selectedIds.length > 0 && <button onClick={handleBulkDelete} disabled={isUploading} className="bg-red-500/10 text-red-500 px-4 py-2 rounded-xl text-xs font-black border border-red-500/20 hover:bg-red-500 transition-all disabled:opacity-50">ELIMINAR ({selectedIds.length})</button>}
           <div className="relative p-4 border-2 border-dashed border-white/10 rounded-2xl hover:border-accent-electric/50 transition-all cursor-pointer">
             <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept=".pdf" multiple onChange={(e) => e.target.files && handleFileUpload(e.target.files)} />
             <div className="flex items-center gap-3 text-sm font-bold text-gray-400">{isUploading ? <Loader2 className="animate-spin text-accent-electric" size={20}/> : <FileUp size={20}/>} Subir Contratos</div>

@@ -39,7 +39,7 @@ export default function ChatContainer({
     if (!messageText.trim() || isThinking) return;
     setInput('');
     await sendMessage(messageText);
-    onSessionCreated(); // Refrescar lista de sesiones por si es nuevo
+    if (onSessionCreated) onSessionCreated(); 
   };
 
   return (

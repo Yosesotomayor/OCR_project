@@ -35,8 +35,8 @@ def extract_text_from_pdf(file_content: bytes) -> str:
                 continue
             
             # 2. Si no hay texto nativo (escaneado), usamos PaddleOCR
-            # Renderizar página a imagen de alta resolución para OCR (300 DPI)
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2)) 
+            # Renderizar página a imagen de mayor resolución (300 DPI aprox con Matrix 3)
+            pix = page.get_pixmap(matrix=fitz.Matrix(3, 3)) 
             img_data = pix.samples
             img = Image.frombytes("RGB", [pix.width, pix.height], img_data)
             img_np = np.array(img)
