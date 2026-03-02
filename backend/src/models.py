@@ -8,10 +8,11 @@ class Contract(Base):
     id = Column(String, primary_key=True, index=True)
     filename = Column(String, nullable=False)
     status = Column(String, default="processing")
-    progress = Column(Integer, default=0) # NUEVO: Progreso de 0 a 100
+    progress = Column(Integer, default=0)
     tenant_name = Column(String, nullable=True)
     monthly_rent = Column(Numeric(precision=12, scale=2), nullable=True)
     currency = Column(String(3), nullable=True)
+    start_date = Column(Date, nullable=True) # NUEVO: Fecha de Inicio
     expiry_date = Column(Date, nullable=True)
     property_name = Column(String, nullable=True)
     property_zone = Column(String, nullable=True)

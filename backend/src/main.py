@@ -88,7 +88,7 @@ class UserResponse(BaseModel):
 
 class ContractUpdate(BaseModel):
     status: str
-    progress: Optional[int] = None # NUEVO
+    progress: Optional[int] = None
     extracted_data: Optional[str] = None
     error_detail: Optional[str] = None
 
@@ -96,10 +96,11 @@ class ContractSchema(BaseModel):
     id: str
     filename: str
     status: str
-    progress: int # NUEVO
+    progress: int
     tenant_name: Optional[str] = None
     monthly_rent: Optional[float] = None
     currency: Optional[str] = None
+    start_date: Optional[date] = None # NUEVO
     expiry_date: Optional[date] = None
     property_name: Optional[str] = None
     property_zone: Optional[str] = None
@@ -165,7 +166,6 @@ async def get_url(contract_id: str, db: Session = Depends(get_db)):
     contract = db.query(Contract).filter(Contract.id == contract_id).first()
     if not contract: raise HTTPException(404)
     url = s3.generate_presigned_url(contract.s3_key)
-    if not url: raise HTTPException(500, "Error generating URL")
     return {"presigned_url": url}
 
 @app.post("/upload")
@@ -174,7 +174,7 @@ async def upload(file: UploadFile = File(...), db: Session = Depends(get_db), cu
     content = await file.read()
     key = f"contracts/{cid}/{file.filename}"
     s3.upload_file(content, key)
-    contract = Contract(id=cid, filename=file.filename, s3_key=key, status="processing", progress=10) # Empieza en 10%
+    contract = Contract(id=cid, filename=file.filename, s3_key=key, status="processing", progress=10)
     db.add(contract); db.commit()
     async with httpx.AsyncClient(timeout=10.0) as client:
         try: await client.post(f"{ML_SERVICE_URL}/process", json={"contract_id": cid, "s3_key": key, "filename": file.filename})
@@ -187,10 +187,9 @@ async def update_ml(contract_id: str, update: ContractUpdate, db: Session = Depe
     db_contract = db.query(Contract).filter(Contract.id == contract_id).first()
     if not db_contract: raise HTTPException(404)
     db_contract.status = update.status
+    if update.progress is not None: db_contract.progress = update.progress
     db_contract.error_detail = update.error_detail
-
     if update.extracted_data:
-        logger.info(f"✨ Data extraida: {update.extracted_data}")
         try:
             data = json.loads(update.extracted_data)
             db_contract.tenant_name = data.get("arrendatario")
@@ -198,18 +197,15 @@ async def update_ml(contract_id: str, update: ContractUpdate, db: Session = Depe
             db_contract.currency = data.get("moneda")
             db_contract.property_name = data.get("nombre_propiedad")
             db_contract.property_zone = data.get("zona_propiedad")
-
-            logger.info(f"✅ Campos asignados: Rent={db_contract.monthly_rent}, Zone={db_contract.property_zone}")
-
+            # PARSEO DE FECHAS
+            if data.get("fecha_inicio"):
+                try: db_contract.start_date = datetime.strptime(data["fecha_inicio"], "%Y-%m-%d").date()
+                except: pass
             if data.get("fecha_vencimiento"):
                 try: db_contract.expiry_date = datetime.strptime(data["fecha_vencimiento"], "%Y-%m-%d").date()
                 except: pass
-        except Exception as e:
-            logger.error(f"❌ Error procesando JSON: {str(e)}")
-
-    db.commit()
-    return {"status": "ok"}
-
+        except: pass
+    db.commit(); return {"status": "ok"}
 
 @app.get("/contracts/{contract_id}/exists", dependencies=[Depends(validate_internal_token)])
 async def exists(contract_id: str, db: Session = Depends(get_db)):
@@ -219,7 +215,7 @@ async def exists(contract_id: str, db: Session = Depends(get_db)):
 @app.delete("/admin/contracts/{contract_id}", status_code=204)
 async def delete_contract(contract_id: str, db: Session = Depends(get_db), current: User = Depends(get_current_admin_user)):
     contract = db.query(Contract).filter(Contract.id == contract_id).first()
-    if not contract: raise HTTPException(404)
+    if not contract: raise HTTPException(status_code=404)
     s3.delete_file(contract.s3_key)
     try:
         async with httpx.AsyncClient() as client:
@@ -250,15 +246,9 @@ async def chat(req: ChatRequest, db: Session = Depends(get_db), current: User = 
     db.add(ChatMessage(id=str(uuid.uuid4()), chat_id=chat_id, role="user", content=req.question))
     db.commit()
     contracts = db.query(Contract).all()
-    total_mrr = sum([float(c.monthly_rent) for c in contracts if c.monthly_rent and c.status == "completed"])
-    
-    summary = f"SISTEMA DE GESTIÓN LEASELENS - DATOS REALES:\n"
-    summary += f"- TOTAL DE CONTRATOS: {len(contracts)}\n"
-    summary += f"- MONTO TOTAL DE RENTAS (MRR): {total_mrr} MXN\n"
-    summary += f"- LISTA DE CONTRATOS Y RENTAS INDIVIDUALES:\n"
-    for c in contracts:
-        summary += f"  * Arrendatario: {c.tenant_name or 'S/I'}, Renta: {float(c.monthly_rent or 0)} {c.currency or 'MXN'}, Estatus: {c.status}\n"
-    
+    total_mrr = sum([float(c.monthly_rent or 0) for c in contracts if c.status == "completed"])
+    summary = f"SISTEMA LEASELENS - DATOS REALES:\n- TOTAL CONTRATOS: {len(contracts)}\n- MRR TOTAL: {total_mrr} MXN\n"
+    for c in contracts: summary += f"* [{c.filename}] {c.tenant_name}, Renta: {c.monthly_rent}, Inicio: {c.start_date}, Vence: {c.expiry_date}\n"
     req.portfolio_summary = summary
     async def stream():
         async with httpx.AsyncClient(timeout=300.0) as client:
@@ -270,7 +260,7 @@ async def chat(req: ChatRequest, db: Session = Depends(get_db), current: User = 
                         yield chunk
                 db.add(ChatMessage(id=str(uuid.uuid4()), chat_id=chat_id, role="assistant", content=accumulated))
                 db.commit()
-            except: yield "Error de conexion con el motor de IA.".encode("utf-8")
+            except: yield "Error de conexion.".encode("utf-8")
     return StreamingResponse(stream(), media_type="text/plain", headers={"X-Chat-ID": chat_id})
 
 @app.get("/admin/users", response_model=List[UserResponse])

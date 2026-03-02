@@ -59,11 +59,8 @@ async def run_heavy_processing(contract_id: str, s3_key: str, filename: str):
             # 1. OCR (20%)
             await client.patch(f"{BACKEND_URL}/contracts/{contract_id}", json={"status": "processing", "progress": 20}, headers={"X-Internal-Token": INTERNAL_TOKEN})
             file_bytes = s3.download_file(s3_key)
-            if not file_bytes:
-                logger.error("❌ No se pudo descargar de S3")
-                return
+            if not file_bytes: return
             text = extract_text_from_pdf(file_bytes)
-            logger.info(f"📄 Texto extraído ({len(text)} caracteres)")
             
             # 2. Vectorizacion (40%)
             await client.patch(f"{BACKEND_URL}/contracts/{contract_id}", json={"status": "processing", "progress": 40}, headers={"X-Internal-Token": INTERNAL_TOKEN})
@@ -74,13 +71,13 @@ async def run_heavy_processing(contract_id: str, s3_key: str, filename: str):
             await client.patch(f"{BACKEND_URL}/contracts/{contract_id}", json={"status": "processing", "progress": 70}, headers={"X-Internal-Token": INTERNAL_TOKEN})
             pages = text.split("--- PÁGINA")
             raw_data = {}
-            target_fields = ["monto_renta", "moneda", "arrendatario", "fecha_vencimiento", "zona_propiedad", "nombre_propiedad"]
+            target_fields = ["monto_renta", "moneda", "arrendatario", "fecha_inicio", "fecha_vencimiento", "zona_propiedad", "nombre_propiedad"]
             
             for i, page_content in enumerate(pages[:15]):
                 if not page_content.strip(): continue
                 extract_prompt = (
                     f"### TAREA: Extrae datos del contrato en JSON.\n"
-                    f"### CAMPOS: monto_renta (num), moneda (ISO), arrendatario (nombre), fecha_vencimiento (YYYY-MM-DD), zona_propiedad, nombre_propiedad.\n"
+                    f"### CAMPOS: monto_renta (num), moneda, arrendatario, fecha_inicio (YYYY-MM-DD), fecha_vencimiento (YYYY-MM-DD), zona_propiedad, nombre_propiedad.\n"
                     f"### TEXTO:\n{page_content[:3500]}\n\n"
                     f"### RESPUESTA (SOLO JSON):"
                 )
@@ -98,9 +95,9 @@ async def run_heavy_processing(contract_id: str, s3_key: str, filename: str):
             await client.patch(f"{BACKEND_URL}/contracts/{contract_id}", json={"status": "processing", "progress": 90}, headers={"X-Internal-Token": INTERNAL_TOKEN})
             validation_prompt = (
                 f"### SISTEMA: Auditor Legal.\n"
-                f"### TEXTO DOCUMENTO:\n{text[:5000]}\n\n"
-                f"### DATOS ACTUALES:\n{json.dumps(raw_data)}\n\n"
-                f"### TAREA: Corrige 'monto_renta' (solo monto mensual), 'arrendatario', 'zona_propiedad'.\n"
+                f"### TEXTO:\n{text[:5000]}\n\n"
+                f"### DATOS:\n{json.dumps(raw_data)}\n\n"
+                f"### TAREA: Corrige montos y fechas (inicio y vencimiento).\n"
                 f"### RESPUESTA (SOLO JSON FINAL):"
             )
             validated_resp = llm_validator.invoke(validation_prompt)
@@ -135,20 +132,14 @@ async def query_stream(req: ChatRequest):
     if not is_global:
         results = vector_db.search(req.question, n_results=5)
         context = "\n".join(results['documents'][0])
-    
     history = "".join([f"{m['role']}: {m['content']}\n" for m in req.history[-3:]])
-    
     full_prompt = (
-        f"### ROL: Analista Legal Senior LeaseLens AI.\n"
-        f"### MEMORIA GLOBAL (DATOS REALES DE DB):\n{req.portfolio_summary}\n\n"
-        f"### CONTEXTO DOCUMENTAL (PDF):\n{context}\n\n"
-        f"### HISTORIAL:\n{history}\n"
-        f"### INSTRUCCIÓN: Responde profesional en TEXTO PLANO. "
-        f"Si te preguntan totales o estadísticas, usa la MEMORIA GLOBAL. "
-        f"NUNCA inventes datos. Tienes permiso para calcular sumas basadas en la información arriba.\n"
+        f"### ROL: Analista Senior LeaseLens AI.\n"
+        f"### MEMORIA GLOBAL:\n{req.portfolio_summary}\n\n"
+        f"### CONTEXTO PDF:\n{context}\n\n"
+        f"### INSTRUCCIÓN: Responde en TEXTO PLANO.\n"
         f"### PREGUNTA: {req.question}"
     )
-
     async def generate():
         async for chunk in llm_chat.astream(full_prompt): yield chunk
     return StreamingResponse(generate(), media_type="text/plain")
