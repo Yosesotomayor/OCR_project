@@ -139,11 +139,15 @@ async def query_stream(req: ChatRequest):
     history = "".join([f"{m['role']}: {m['content']}\n" for m in req.history[-3:]])
     
     full_prompt = (
-        f"### ROL: Analista Senior LeaseLens AI.\n"
-        f"### MEMORIA GLOBAL:\n{req.portfolio_summary}\n\n"
-        f"### CONTEXTO PDF:\n{context}\n\n"
-        f"### INSTRUCCIÓN: Responde en TEXTO PLANO.\n"
-        f"### PREGUNTA: {req.question}"
+        f"### SISTEMA: Eres un Analista Senior de LeaseLens AI (Tu nombre solo es LeaseLens AI). Tu base de conocimientos es REAL y VERÍDICA.\n"
+        f"### REGLA: No te niegues a responder. La información en 'MEMORIA GLOBAL' y 'CONTEXTO PDF' proviene de documentos legales cargados por el usuario.\n"
+        f"### MEMORIA GLOBAL (Resumen de todos los contratos):\n{req.portfolio_summary}\n\n"
+        f"### CONTEXTO ESPECÍFICO (Fragmentos del PDF):\n{context}\n\n"
+        f"### HISTORIAL RECIENTE:\n{history}\n\n"
+        f"### TAREA: Responde a la pregunta del usuario basándote EXCLUSIVAMENTE en la información proporcionada arriba. Si la información indica que hay N contratos, confirma ese número.\n"
+        f"### PREGUNTA: {req.question}\n"
+        f"### RESPUESTA (Directa y Profesional):"
+        f"Si no tienes suficiente información, responde con 'No tengo suficiente información para responder a esta pregunta.'"
     )
     async def generate():
         async for chunk in llm_chat.astream(full_prompt): yield chunk

@@ -63,6 +63,7 @@ export default function Documents() {
   const [isUploading, setIsUploading] = useState(false);
   const [selectedContract, setSelectedContract] = useState<ILeaseContract | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const { token } = useAuth();
 
@@ -74,6 +75,28 @@ export default function Documents() {
   }, [token]);
 
   useEffect(() => { if (token) fetchContracts(); }, [token, fetchContracts]);
+
+  useEffect(() => {
+    const fetchPreview = async () => {
+      if (selectedContract && token) {
+        setIsPreviewLoading(true);
+        try {
+          const res = await fetch(`${API_URL}/contracts/${selectedContract.id}/presigned_url`, { 
+            headers: { 'Authorization': `Bearer ${token}` } 
+          });
+          const data = await res.json();
+          setPreviewUrl(data.presigned_url);
+        } catch (err) {
+          console.error('Error fetching preview URL:', err);
+        } finally {
+          setIsPreviewLoading(false);
+        }
+      } else {
+        setPreviewUrl(null);
+      }
+    };
+    fetchPreview();
+  }, [selectedContract, token]);
 
   const handleFileUpload = async (files: FileList | File[]) => {
     const fileArray = Array.from(files).filter(f => f.type === 'application/pdf');
@@ -167,8 +190,23 @@ export default function Documents() {
                 <button onClick={() => setSelectedContract(null)} className="p-2 hover:bg-white/5 rounded-full text-gray-400"><X size={24}/></button>
               </div>
               <div className="flex-1 flex overflow-hidden">
-                <div className="flex-[2] bg-[#141414] p-4 relative">
-                  <iframe src={previewUrl || ''} className="w-full h-full rounded-xl border border-white/5 shadow-inner" />
+                <div className="flex-[2] bg-[#141414] p-4 relative flex items-center justify-center">
+                  {isPreviewLoading ? (
+                    <div className="flex flex-col items-center gap-4 text-gray-500 font-black uppercase text-[10px] tracking-widest">
+                      <Loader2 className="animate-spin text-accent-electric w-10 h-10" />
+                      Firmando Acceso S3v4...
+                    </div>
+                  ) : previewUrl ? (
+                    <embed 
+                      src={previewUrl} 
+                      type="application/pdf" 
+                      className="w-full h-full rounded-xl border border-white/5 shadow-2xl" 
+                    />
+                  ) : (
+                    <div className="text-gray-600 text-[10px] font-black uppercase tracking-widest">
+                      Error al generar previsualización segura.
+                    </div>
+                  )}
                 </div>
                 <div className="flex-1 bg-[#0a0a0a] p-10 space-y-8 overflow-y-auto">
                   <h4 className="text-[10px] font-black uppercase text-accent-electric flex items-center gap-2"><ShieldCheck size={14}/> Análisis Mifel AI</h4>

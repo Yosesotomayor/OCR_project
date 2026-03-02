@@ -16,7 +16,9 @@ interface IChatSession {
 
 export default function Chat() {
   const [sessions, setSessions] = useState<IChatSession[]>([]);
-  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [activeChatId, setActiveChatId] = useState<string | null>(() => {
+    return localStorage.getItem('last_active_chat_id');
+  });
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isThinking, setIsThinking] = useState(false);
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
@@ -30,17 +32,35 @@ export default function Chat() {
 
   const { token } = useAuth();
 
-  // Guardar preferencia cada vez que cambie
+  // Guardar preferencia de sidebar
   useEffect(() => {
     localStorage.setItem('chat_sidebar_open', JSON.stringify(isSidebarOpen));
   }, [isSidebarOpen]);
 
+  // Guardar ID del chat activo
+  useEffect(() => {
+    if (activeChatId) {
+      localStorage.setItem('last_active_chat_id', activeChatId);
+    } else {
+      localStorage.removeItem('last_active_chat_id');
+    }
+  }, [activeChatId]);
+
   const fetchSessions = useCallback(async () => {
     try {
       const res = await fetch(`${API_URL}/chats`, { headers: { 'Authorization': `Bearer ${token}` } });
-      if (res.ok) setSessions(await res.json());
+      if (res.ok) {
+        const data = await res.json();
+        setSessions(data);
+        
+        // Si hay un ID guardado pero no hemos cargado los mensajes aún
+        const savedId = localStorage.getItem('last_active_chat_id');
+        if (savedId && !activeChatId) {
+          loadChat(savedId);
+        }
+      }
     } catch (err) { console.error(err); }
-  }, [token]);
+  }, [token, activeChatId]);
 
   const handleRename = async (id: string) => {
     if (!editTitle.trim()) return setEditingChatId(null);
@@ -86,7 +106,22 @@ export default function Chat() {
     }
   };
 
-  useEffect(() => { if (token) fetchSessions(); }, [token, fetchSessions]);
+  useEffect(() => { 
+    if (token) fetchSessions(); 
+  }, [token, fetchSessions]);
+
+  // Cargar el chat guardado al inicio una sola vez cuando las sesiones estén listas
+  useEffect(() => {
+    const savedId = localStorage.getItem('last_active_chat_id');
+    if (savedId && sessions.length > 0 && !activeChatId) {
+      const sessionExists = sessions.some(s => s.id === savedId);
+      if (sessionExists) {
+        loadChat(savedId);
+      } else {
+        localStorage.removeItem('last_active_chat_id');
+      }
+    }
+  }, [sessions]);
 
   return (
     <div className="flex h-full bg-[#050505] text-white font-sans overflow-hidden relative">
