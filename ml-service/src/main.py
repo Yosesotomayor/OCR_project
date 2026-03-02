@@ -33,9 +33,9 @@ llm_extractor = OllamaLLM(model="llama3.2:3b", base_url="http://ollama:11434", n
 @app.on_event("startup")
 async def warmup():
     try:
-        logger.info("🔥 Calentando motores de IA...")
+        logger.info("Calentando motores de IA...")
         llm_chat.invoke("ready")
-        logger.info("✅ Multi-Agentes listos.")
+        logger.info("Multi-Agentes listos.")
     except: pass
 
 INTERNAL_TOKEN = os.getenv("INTERNAL_API_KEY", "super-secret-key-123")
@@ -57,7 +57,7 @@ class ChatRequest(BaseModel):
 async def health_check(): return {"status": "ok"}
 
 async def run_heavy_processing(contract_id: str, s3_key: str, filename: str):
-    logger.info(f"⚙️ Procesando: {contract_id} ({filename})")
+    logger.info(f"Procesando: {contract_id} ({filename})")
     async with httpx.AsyncClient(timeout=300.0) as client:
         try:
             # 1. Fase OCR (20%)

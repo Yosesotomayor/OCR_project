@@ -22,4 +22,7 @@ dependencies = [
     "Pillow>=10.3.0",
     "numpy>=1.26.4",
     "PyMuPDF>=1.23.26",
-]
+    "opencv-python-headless",
+    "setuptools",
+    "uvicorn>=0.30.0",
+    ]

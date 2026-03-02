@@ -1,55 +1,48 @@
-FROM python:3.11-slim-bookworm AS builder
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-
-WORKDIR /app
-
-# 1. Instalar dependencias de compilación completas
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    python3-dev \
-    libpq-dev \
-    g++ \
-    make \
-    cmake \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY ml-service/pyproject.toml ml-service/uv.lock ./
-
-# 2. Sincronizar dependencias (uv creará el .venv)
-RUN uv sync --frozen --no-install-project
-
 FROM python:3.11-slim-bookworm
 LABEL name="LeaseLens-ML-Service-Paddle"
 
+# 1. Configuración de entorno crítica para evitar crashes binarios
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    UV_SYSTEM_PYTHON=1 \
+    PADDLE_HOME=/app/.paddleocr \
+    OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libgomp.so.1
+
 WORKDIR /app
 
-# 3. Dependencias de sistema para ejecución (PaddleOCR + OpenCV)
+# 2. Instalación de dependencias de sistema (Headless OCR + LibGOMP)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 \
-    libgl1 \
-    libglib2.0-0 \
+    gcc \
+    g++ \
     libgomp1 \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
     libsm6 \
     libxext6 \
     libxrender1 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 4. Copiar el entorno virtual y configurar el PATH
-COPY --from=builder /app/.venv /app/.venv
-ENV PATH="/app/.venv/bin:$PATH"
-ENV VIRTUAL_ENV="/app/.venv"
+# 3. Inyectar uv para gestión ultra-rápida de paquetes
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# --- EL SECRETO DEL TURBO BUILD ---
-# 5. Pre-descargar modelos usando el python del venv
-# Forzamos que use el binario del venv para encontrar paddleocr
-RUN /app/.venv/bin/python -c "from paddleocr import PaddleOCR; PaddleOCR(use_angle_cls=True, lang='es', use_gpu=False)"
+# 4. Instalación de dependencias desde pyproject.toml
+COPY ml-service/pyproject.toml ml-service/uv.lock ./
+RUN uv pip install --no-cache .
 
-# 6. Finalmente copiar el código
-COPY ml-service/src /app/src
+# 5. Crear usuario no-root ANTES de usarlo
+RUN groupadd -r paddleuser && useradd -r -m -g paddleuser paddleuser \
+    && mkdir -p $PADDLE_HOME && chown -R paddleuser:paddleuser /app
 
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+# 6. Copiar código fuente y pre-descargar modelos
+COPY ml-service/src ./src
+RUN python src/download_models.py
+
+# 7. Finalizar configuración de seguridad
+USER paddleuser
 
 EXPOSE 8000
 
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
