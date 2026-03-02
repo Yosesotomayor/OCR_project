@@ -22,24 +22,25 @@ app = FastAPI(title="LeaseLens ML-Service")
 s3 = S3Manager()
 vector_db = VectorManager()
 
-llm = OllamaLLM(
-    model="llama3.1:8b", 
-    base_url="http://ollama:11434",
-    num_ctx=4096, # Aumentado para mejor contexto
-    stop=["<|eot_id|>"]
-)
+# --- AGENTES ESPECIALIZADOS ---
+# 1. Analista (Chat): Creativo y ameno
+llm_chat = OllamaLLM(model="llama3.1:8b", base_url="http://ollama:11434", num_ctx=4096, temperature=0.7)
+
+# 2. Extractor (Worker): Rápido y determinístico
+llm_extractor = OllamaLLM(model="llama3.1:8b", base_url="http://ollama:11434", num_ctx=2048, temperature=0.0)
+
+# 3. Validador (QA): Crítico y corrector
+llm_validator = OllamaLLM(model="llama3.1:8b", base_url="http://ollama:11434", num_ctx=4096, temperature=0.1)
 
 @app.on_event("startup")
-async def warmup_llm():
+async def warmup():
     try:
-        logger.info("🔥 Warmup LLM...")
-        llm.invoke("Hi")
-        logger.info("✅ LLM Ready.")
+        llm_chat.invoke("Hi")
+        logger.info("✅ Sistema Multi-Agente (Analista, Extractor, Validador) activo.")
     except: pass
 
 INTERNAL_TOKEN = os.getenv("INTERNAL_API_KEY", "super-secret-key-123")
 BACKEND_URL = os.getenv("BACKEND_INTERNAL_URL", "http://backend:8000")
-
 splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
 
 class IngestRequest(BaseModel):
@@ -53,66 +54,73 @@ class ChatRequest(BaseModel):
     portfolio_summary: Optional[str] = None
 
 @app.get("/health")
-async def health_check():
-    return {"status": "ok"}
+async def health_check(): return {"status": "ok"}
 
 async def run_heavy_processing(contract_id: str, s3_key: str, filename: str):
     logger.info(f"⚙️ Procesando: {contract_id}")
     async with httpx.AsyncClient(timeout=300.0) as client:
         try:
-            # 1. Check existence
             check = await client.get(f"{BACKEND_URL}/contracts/{contract_id}/exists", headers={"X-Internal-Token": INTERNAL_TOKEN})
             if check.status_code != 200: return
 
-            # 2. S3 Download
             file_bytes = s3.download_file(s3_key)
             if not file_bytes: return
 
-            # 3. Smart OCR
             text = extract_text_from_pdf(file_bytes)
             
-            # 4. Vectorize
+            # Indexación para búsqueda futura
             chunks = splitter.split_text(text)
             vector_db.add_documents(chunks, [{"doc_id": contract_id} for _ in chunks], [f"{contract_id}_{i}" for i in range(len(chunks))])
 
-            # 5. ESTRATEGIA DE EXTRACCIÓN ROBUSTA
+            # PASO 1: EXTRACCIÓN (Agente Extractor)
             pages = text.split("--- PÁGINA")
-            extracted_data = {}
+            raw_data = {}
             target_fields = ["monto_renta", "moneda", "arrendatario", "fecha_vencimiento", "zona_propiedad"]
             
-            for i, page_content in enumerate(pages):
+            for page_content in pages[:10]: # Escaneo de las primeras 10 páginas
                 if not page_content.strip(): continue
-                if len(extracted_data) >= len(target_fields): break # Optimización
+                if len(raw_data) >= len(target_fields): break
 
-                prompt = (
-                    f"### TAREA: Extrae datos del contrato en este fragmento.\n"
-                    f"### REGLA: RESPONDE SOLO CON JSON. Usa estas llaves exactas:\n"
-                    f"- monto_renta (número puro, ej: 15000.50)\n"
-                    f"- moneda (ISO ej: MXN)\n"
-                    f"- arrendatario (nombre)\n"
-                    f"- fecha_vencimiento (YYYY-MM-DD)\n"
-                    f"- zona_propiedad (string)\n\n"
-                    f"### FRAGMENTO:\n{page_content[:3000]}\n\n"
-                    f"### RESPUESTA (JSON):"
+                extract_prompt = (
+                    f"### TAREA: Extrae JSON con: monto_renta, moneda, arrendatario, fecha_vencimiento, zona_propiedad.\n"
+                    f"### TEXTO:\n{page_content[:3000]}\n\n"
+                    f"### JSON:"
                 )
-                
-                resp = llm.invoke(prompt)
+                resp = llm_extractor.invoke(extract_prompt)
                 try:
-                    clean = resp.strip()
-                    if "{" in clean and "}" in clean:
-                        data = json.loads(clean[clean.find("{"):clean.rfind("}")+1])
+                    if "{" in resp:
+                        data = json.loads(resp[resp.find("{"):resp.rfind("}")+1])
                         for k in target_fields:
-                            if data.get(k) and not extracted_data.get(k):
-                                extracted_data[k] = data[k]
+                            if data.get(k) and not raw_data.get(k): raw_data[k] = data[k]
                 except: continue
 
-            # 6. Callback al Backend
+            # PASO 2: VALIDACIÓN (Agente Validador)
+            logger.info(f"🔍 Validando datos para {contract_id}...")
+            validation_prompt = (
+                f"### SISTEMA: Eres un Auditor Legal de Mifel. Tu misión es corregir el JSON del Extractor.\n"
+                f"### DATOS EXTRAÍDOS:\n{json.dumps(raw_data)}\n\n"
+                f"### TEXTO DE REFERENCIA (Resumen):\n{text[:4000]}\n\n"
+                f"### TAREA:\n"
+                f"1. Verifica que 'monto_renta' sea la RENTA MENSUAL, no el depósito.\n"
+                f"2. Asegura que el nombre del 'arrendatario' sea el correcto.\n"
+                f"3. Si hay errores, corrígelos. Si falta algo y está en el texto, añádelo.\n"
+                f"### RESPONDE ÚNICAMENTE CON EL JSON FINAL CORREGIDO:"
+            )
+            validated_resp = llm_validator.invoke(validation_prompt)
+            
+            final_json = raw_data
+            try:
+                if "{" in validated_resp:
+                    final_json = json.loads(validated_resp[validated_resp.find("{"):validated_resp.rfind("}")+1])
+            except: logger.warning("Fallo en parseo de validación, usando raw_data.")
+
+            # Callback al Backend
             await client.patch(
                 f"{BACKEND_URL}/contracts/{contract_id}",
-                json={"status": "completed", "extracted_data": json.dumps(extracted_data)},
+                json={"status": "completed", "extracted_data": json.dumps(final_json)},
                 headers={"X-Internal-Token": INTERNAL_TOKEN}
             )
-            logger.info(f"✅ Finalizado: {contract_id}")
+            logger.info(f"✅ Proceso verificado finalizado: {contract_id}")
 
         except Exception as e:
             logger.error(f"💥 Error: {str(e)}")
@@ -125,20 +133,23 @@ async def process(req: IngestRequest, background_tasks: BackgroundTasks):
 
 @app.post("/query-stream")
 async def query_stream(req: ChatRequest):
-    results = vector_db.search(req.question, n_results=5)
-    context = "\n".join(results['documents'][0])
+    is_global = any(word in req.question.lower() for word in ["cuantos", "total", "resumen", "lista", "portafolio", "monto"])
+    context = ""
+    if not is_global:
+        results = vector_db.search(req.question, n_results=5)
+        context = "\n".join(results['documents'][0])
+
     history = "".join([f"{m['role']}: {m['content']}\n" for m in req.history[-3:]])
-
     full_prompt = (
-        f"Analista Legal. Responde profesional en texto plano (sin markdown).\n"
-        f"PORTAFOLIO:\n{req.portfolio_summary}\n\n"
-        f"CONTEXTO:\n{context}\n\n"
+        f"Analista Senior LeaseLens. Responde profesional en texto plano.\n"
+        f"MEMORIA GLOBAL:\n{req.portfolio_summary}\n\n"
+        f"CONTEXTO DOCUMENTAL:\n{context}\n\n"
         f"HISTORIAL:\n{history}\n"
-        f"PREGUNTA: {req.question}"
+        f"PREGUNTA: {req.question}\n"
+        f"Dato clave: Prioriza la MEMORIA GLOBAL para estadísticas."
     )
-
     async def generate():
-        async for chunk in llm.astream(full_prompt): yield chunk
+        async for chunk in llm_chat.astream(full_prompt): yield chunk
     return StreamingResponse(generate(), media_type="text/plain")
 
 @app.delete("/delete-vectors/{contract_id}", status_code=204)
