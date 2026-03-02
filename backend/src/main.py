@@ -393,11 +393,18 @@ async def update_ml(contract_id: str, update: ContractUpdate, db: Session = Depe
     if update.extracted_data:
         try:
             data = json.loads(update.extracted_data)
-            c.tenant_name = data.get("arrendatario")
+            
+            # SANITIZACIÓN: Si arrendatario es un dict, extraer solo el nombre
+            arrendatario = data.get("arrendatario")
+            if isinstance(arrendatario, dict):
+                c.tenant_name = arrendatario.get("nombre") or str(arrendatario)
+            else:
+                c.tenant_name = str(arrendatario) if arrendatario else None
+
             c.monthly_rent = clean_numeric(data.get("monto_renta"))
-            c.currency = data.get("moneda")
-            c.property_name = data.get("nombre_propiedad")
-            c.property_zone = data.get("zona_propiedad")
+            c.currency = str(data.get("moneda")) if data.get("moneda") else "MXN"
+            c.property_name = str(data.get("nombre_propiedad")) if data.get("nombre_propiedad") else None
+            c.property_zone = str(data.get("zona_propiedad")) if data.get("zona_propiedad") else None
             
             # Parseo robusto de fechas (YYYY-MM-DD)
             for date_field in ["fecha_inicio", "fecha_vencimiento"]:

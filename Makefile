@@ -1,5 +1,5 @@
 SERVICE_NAME ?= 
-FLAGS ?= -d 
+FLAGS ?=
 
 .PHONY: run run_gpu
 run:
