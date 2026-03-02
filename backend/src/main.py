@@ -29,7 +29,6 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="LeaseLens API Gateway")
 
-# CORS
 origins = ["*"]
 app.add_middleware(
     CORSMiddleware, allow_origins=origins, allow_credentials=True, 
@@ -56,6 +55,9 @@ class ChatRequest(BaseModel):
     history: Optional[List[dict]] = []
     portfolio_summary: Optional[str] = None
     chat_id: Optional[str] = None
+
+class ChatUpdateTitle(BaseModel):
+    title: str
 
 class ChatResponse(BaseModel):
     id: str
@@ -86,6 +88,7 @@ class UserResponse(BaseModel):
 
 class ContractUpdate(BaseModel):
     status: str
+    progress: Optional[int] = None # NUEVO
     extracted_data: Optional[str] = None
     error_detail: Optional[str] = None
 
@@ -93,6 +96,7 @@ class ContractSchema(BaseModel):
     id: str
     filename: str
     status: str
+    progress: int # NUEVO
     tenant_name: Optional[str] = None
     monthly_rent: Optional[float] = None
     currency: Optional[str] = None
@@ -103,7 +107,7 @@ class ContractSchema(BaseModel):
     error_detail: Optional[str] = None
     class Config: from_attributes = True
 
-# --- AUTH ---
+# --- ENDPOINTS AUTH & CHAT ---
 @app.post("/register", response_model=UserResponse)
 async def register_user(user: UserLogin, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.email == user.email).first()
@@ -123,7 +127,6 @@ async def login(data: UserLogin, db: Session = Depends(get_db)):
 @app.get("/users/me", response_model=UserResponse)
 async def me(current: User = Depends(get_current_active_user)): return current
 
-# --- CHATS ---
 @app.get("/chats", response_model=List[ChatResponse])
 async def list_chats(db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
     return db.query(Chat).filter(Chat.user_id == current.id).order_by(Chat.created_at.desc()).all()
@@ -134,23 +137,19 @@ async def get_chat_messages(chat_id: str, db: Session = Depends(get_db), current
     if not chat: raise HTTPException(404)
     return chat.messages
 
-class ChatUpdateTitle(BaseModel):
-    title: str
-
 @app.patch("/chats/{chat_id}", status_code=200)
 async def update_chat_title(chat_id: str, data: ChatUpdateTitle, db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
     chat = db.query(Chat).filter(Chat.id == chat_id, Chat.user_id == current.id).first()
     if not chat: raise HTTPException(404)
     chat.title = data.title
-    db.commit()
-    return {"status": "ok"}
+    db.commit(); return {"status": "ok"}
 
 @app.delete("/chats/{chat_id}", status_code=204)
 async def delete_chat(chat_id: str, db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
     chat = db.query(Chat).filter(Chat.id == chat_id, Chat.user_id == current.id).first()
     if chat: db.delete(chat); db.commit()
 
-# --- CONTRACTS ---
+# --- ENDPOINTS CONTRATOS ---
 @app.get("/contracts", response_model=List[ContractSchema])
 async def list_contracts(db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
     return db.query(Contract).all()
@@ -159,7 +158,7 @@ async def list_contracts(db: Session = Depends(get_db), current: User = Depends(
 async def get_contract_status(contract_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     db_contract = db.query(Contract).filter(Contract.id == contract_id).first()
     if not db_contract: raise HTTPException(404)
-    return {"status": db_contract.status, "error_detail": db_contract.error_detail}
+    return {"status": db_contract.status, "progress": db_contract.progress, "error_detail": db_contract.error_detail}
 
 @app.get("/contracts/{contract_id}/presigned_url")
 async def get_url(contract_id: str, db: Session = Depends(get_db)):
@@ -175,7 +174,7 @@ async def upload(file: UploadFile = File(...), db: Session = Depends(get_db), cu
     content = await file.read()
     key = f"contracts/{cid}/{file.filename}"
     s3.upload_file(content, key)
-    contract = Contract(id=cid, filename=file.filename, s3_key=key, status="processing")
+    contract = Contract(id=cid, filename=file.filename, s3_key=key, status="processing", progress=10) # Empieza en 10%
     db.add(contract); db.commit()
     async with httpx.AsyncClient(timeout=10.0) as client:
         try: await client.post(f"{ML_SERVICE_URL}/process", json={"contract_id": cid, "s3_key": key, "filename": file.filename})
@@ -187,6 +186,7 @@ async def update_ml(contract_id: str, update: ContractUpdate, db: Session = Depe
     db_contract = db.query(Contract).filter(Contract.id == contract_id).first()
     if not db_contract: raise HTTPException(404)
     db_contract.status = update.status
+    if update.progress is not None: db_contract.progress = update.progress
     db_contract.error_detail = update.error_detail
     if update.extracted_data:
         try:
@@ -218,7 +218,6 @@ async def delete_contract(contract_id: str, db: Session = Depends(get_db), curre
     except: pass
     db.delete(contract); db.commit()
 
-# --- ANALYTICS ---
 @app.get("/analytics/summary")
 async def get_analytics_summary(db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
     now = datetime.now()
@@ -232,7 +231,6 @@ async def get_analytics_summary(db: Session = Depends(get_db), current: User = D
         "upcoming_expirations": exp30, "compliance_score": round(100 - (errors/total*100), 1) if total > 0 else 100, "error_count": errors
     }
 
-# --- STREAMING CHAT ---
 @app.post("/chat/stream")
 async def chat(req: ChatRequest, db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
     if not req.chat_id:
@@ -240,16 +238,13 @@ async def chat(req: ChatRequest, db: Session = Depends(get_db), current: User = 
         new_chat = Chat(id=chat_id, title=req.question[:30] + "...", user_id=current.id)
         db.add(new_chat); db.commit()
     else: chat_id = req.chat_id
-
     db.add(ChatMessage(id=str(uuid.uuid4()), chat_id=chat_id, role="user", content=req.question))
     db.commit()
-
     contracts = db.query(Contract).all()
     total_mrr = sum([c.monthly_rent for c in contracts if c.monthly_rent and c.status == "completed"])
     summary = f"SISTEMA LEGAL:\n- Contratos: {len(contracts)}\n- MRR: {total_mrr}\n"
     for c in contracts: summary += f"* [{c.filename}] {c.tenant_name}, Renta: {c.monthly_rent}\n"
     req.portfolio_summary = summary
-
     async def stream():
         async with httpx.AsyncClient(timeout=300.0) as client:
             try:
@@ -260,13 +255,9 @@ async def chat(req: ChatRequest, db: Session = Depends(get_db), current: User = 
                         yield chunk
                 db.add(ChatMessage(id=str(uuid.uuid4()), chat_id=chat_id, role="assistant", content=accumulated))
                 db.commit()
-            except Exception as e:
-                logger.error(f"Error en stream: {str(e)}")
-                yield "Error de conexion con el motor de IA.".encode("utf-8")
-    
+            except: yield "Error de conexion con el motor de IA.".encode("utf-8")
     return StreamingResponse(stream(), media_type="text/plain", headers={"X-Chat-ID": chat_id})
 
-# --- ADMIN USERS ---
 @app.get("/admin/users", response_model=List[UserResponse])
 async def list_users(db: Session = Depends(get_db), current: User = Depends(get_current_admin_user)):
     return db.query(User).all()
