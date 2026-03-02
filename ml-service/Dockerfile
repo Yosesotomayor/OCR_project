@@ -18,8 +18,11 @@ LABEL name="LeaseLens-ML-Service"
 
 WORKDIR /app
 
+# Instalar dependencias de sistema necesarias para OpenCV/EasyOCR
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    libgl1 \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/.venv /app/.venv
@@ -29,6 +32,9 @@ COPY ml-service/src /app/src
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+
+# Pre-descargar modelos de EasyOCR para evitar demoras en runtime
+RUN python -c "import easyocr; easyocr.Reader(['es', 'en'])"
 
 EXPOSE 8000
 

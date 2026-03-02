@@ -106,8 +106,8 @@ export default function ChatContainer({ messages, setMessages, isThinking, setIs
                 
                 <div className="space-y-2 flex-grow">
                   <div className={cn(
-                    "rounded-3xl px-6 py-5 text-sm leading-7 break-words shadow-2xl transition-all",
-                    msg.role === 'user' ? "bg-accent-electric text-black font-semibold rounded-tr-none" : "bg-white/2 border border-white/5 text-gray-200 rounded-tl-none font-medium"
+                    "rounded-3xl px-6 py-5 text-sm leading-7 break-words shadow-2xl transition-all border-none",
+                    msg.role === 'user' ? "bg-accent-electric text-black font-semibold rounded-tr-none" : "bg-white/2 text-gray-200 rounded-tl-none font-medium"
                   )}>
                     {msg.role === 'assistant' && msg.content === '' ? (
                       <div className="space-y-3 w-full animate-pulse">
@@ -133,7 +133,7 @@ export default function ChatContainer({ messages, setMessages, isThinking, setIs
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }}}
             placeholder="Pregunta sobre tu portafolio legal..."
-            className="flex-1 bg-transparent border-none focus:ring-0 text-gray-200 py-3 px-4 text-sm resize-none"
+            className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-gray-200 py-3 px-4 text-sm resize-none shadow-none"
           />
           <button onClick={() => handleSend()} className="p-4 bg-accent-electric text-black rounded-2xl hover:scale-105 active:scale-95 transition-all shadow-lg">
             <Send size={20} />

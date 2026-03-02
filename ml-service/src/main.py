@@ -57,6 +57,7 @@ class IngestRequest(BaseModel):
 class ChatRequest(BaseModel):
     question: str
     history: Optional[List[dict]] = []
+    portfolio_summary: Optional[str] = None
 
 @app.get("/health")
 async def health_check():
@@ -140,6 +141,7 @@ async def run_heavy_processing(contract_id: str, s3_key: str, filename: str):
 
 @app.post("/query-stream")
 async def query_stream(req: ChatRequest):
+    # 1. Búsqueda vectorial para detalles profundos (cláusulas)
     results = vector_db.search(req.question, n_results=5)
     context = "\n".join(results['documents'][0])
 
@@ -148,10 +150,13 @@ async def query_stream(req: ChatRequest):
         role = "Usuario" if msg['role'] == 'user' else "Asistente"
         formatted_history += f"{role}: {msg['content']}\n"
 
+    # 2. Inyectar Memoria Global + Contexto Vectorial
     full_prompt = (
         f"Eres un analista legal experto de LeaseLens AI.\n"
+        f"RESUMEN GLOBAL DEL PORTAFOLIO (Usa esto para estadísticas y listas):\n{req.portfolio_summary}\n\n"
         f"Historial de conversación:\n{formatted_history}\n"
-        f"Contexto del contrato:\n{context}\n\n"
+        f"CONTEXTO ESPECÍFICO DE CLÁUSULAS (Usa esto para preguntas sobre el contenido):\n{context}\n\n"
+        f"INSTRUCCIÓN: Responde de forma concisa y profesional. Si el usuario pregunta 'cuantos tengo' o sobre montos totales, usa el RESUMEN GLOBAL.\n"
         f"Pregunta del usuario: {req.question}"
     )
 

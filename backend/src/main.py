@@ -30,8 +30,23 @@ from .models import Contract, User
 app = FastAPI(title="LeaseLens API Gateway")
 logger = logging.getLogger(__name__)
 
-origins = ["*"]
-app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+# Configuración de CORS estricta pero flexible para desarrollo
+origins = [
+    "http://localhost",
+    "http://localhost:80",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"]
+)
 
 s3 = S3Manager()
 ML_SERVICE_URL = os.getenv("ML_SERVICE_URL", "http://ml-service:8000")
@@ -62,6 +77,7 @@ class UserResponse(BaseModel):
 class ContractUpdate(BaseModel):
     status: str
     extracted_data: Optional[str] = None
+    error_detail: Optional[str] = None
 
 class ContractSchema(BaseModel):
     id: str
@@ -100,6 +116,12 @@ async def me(current: User = Depends(get_current_active_user)): return current
 async def list_contracts(db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
     return db.query(Contract).all()
 
+@app.get("/contracts/{contract_id}/status")
+async def get_contract_status(contract_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    db_contract = db.query(Contract).filter(Contract.id == contract_id).first()
+    if not db_contract: raise HTTPException(status_code=404, detail="Contract not found")
+    return {"status": db_contract.status, "error_detail": db_contract.error_detail}
+
 @app.get("/contracts/{contract_id}/presigned_url")
 async def get_url(contract_id: str, db: Session = Depends(get_db)):
     contract = db.query(Contract).filter(Contract.id == contract_id).first()
@@ -110,20 +132,32 @@ async def get_url(contract_id: str, db: Session = Depends(get_db)):
 @app.post("/upload")
 async def upload(file: UploadFile = File(...), db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
     cid = str(uuid.uuid4())
-    content = await file.read()
-    key = f"contracts/{cid}/{file.filename}"
-    s3.upload_file(content, key)
-    db_contract = Contract(id=cid, filename=file.filename, s3_key=key, status="processing")
-    db.add(db_contract); db.commit()
-    async with httpx.AsyncClient() as client:
-        await client.post(f"{ML_SERVICE_URL}/process", json={"contract_id": cid, "s3_key": key, "filename": file.filename})
-    return {"contract_id": cid}
+    try:
+        content = await file.read()
+        key = f"contracts/{cid}/{file.filename}"
+        s3.upload_file(content, key)
+        db_contract = Contract(id=cid, filename=file.filename, s3_key=key, status="processing")
+        db.add(db_contract); db.commit()
+        
+        # Llamada robusta al ML Service
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            try:
+                await client.post(f"{ML_SERVICE_URL}/process", json={"contract_id": cid, "s3_key": key, "filename": file.filename})
+            except httpx.ConnectError:
+                logger.error(f"ML Service no responde al procesar {cid}. Quedara en cola.")
+                # No lanzamos error 500, dejamos que el usuario vea 'processing'
+        
+        return {"contract_id": cid, "status": "processing"}
+    except Exception as e:
+        logger.error(f"Error critico en upload: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error interno al subir documento")
 
 @app.patch("/contracts/{contract_id}", dependencies=[Depends(validate_internal_token)])
 async def update_ml(contract_id: str, update: ContractUpdate, db: Session = Depends(get_db)):
     contract = db.query(Contract).filter(Contract.id == contract_id).first()
     if not contract: raise HTTPException(status_code=404)
     contract.status = update.status
+    contract.error_detail = update.error_detail
     if update.extracted_data:
         try:
             data = json.loads(update.extracted_data)
@@ -143,41 +177,49 @@ async def exists(contract_id: str, db: Session = Depends(get_db)):
     if db.query(Contract).filter(Contract.id == contract_id).first(): return {"status":"exists"}
     raise HTTPException(404)
 
+@app.delete("/admin/contracts/{contract_id}", status_code=204)
+async def delete_contract(contract_id: str, db: Session = Depends(get_db), current: User = Depends(get_current_admin_user)):
+    contract = db.query(Contract).filter(Contract.id == contract_id).first()
+    if not contract: raise HTTPException(status_code=404)
+    s3.delete_file(contract.s3_key)
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.delete(f"{ML_SERVICE_URL}/delete-vectors/{contract_id}", headers={"X-Internal-Token": INTERNAL_TOKEN})
+    except: logger.error(f"Error borrando vectores de {contract_id}")
+    db.delete(contract); db.commit()
+
 @app.get("/analytics/summary")
 async def get_analytics_summary(db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
     now = datetime.now()
     mrr = db.query(func.sum(Contract.monthly_rent)).filter(Contract.status == "completed").scalar() or 0
-    exp30 = db.query(Contract).filter(Contract.expiry_date <= now + timedelta(days=30), Contract.expiry_date >= now).count()
+    exp30 = db.query(Contract).filter(Contract.expiry_date <= now + timedelta(days=30), Contract.expiry_date >= now, Contract.status == "completed").count()
     total = db.query(Contract).count()
     errors = db.query(Contract).filter(Contract.status == "error").count()
     return {
-        "total_mrr": float(mrr),
-        "active_contracts": db.query(Contract).filter(Contract.status == "completed").count(),
+        "total_mrr": float(mrr), "active_contracts": db.query(Contract).filter(Contract.status == "completed").count(),
         "pending_extractions": db.query(Contract).filter(Contract.status == "processing").count(),
-        "upcoming_expirations": exp30,
-        "compliance_score": round(100 - (errors/total*100), 1) if total > 0 else 100,
-        "error_count": errors
+        "upcoming_expirations": exp30, "compliance_score": round(100 - (errors/total*100), 1) if total > 0 else 100, "error_count": errors
     }
 
 @app.post("/chat/stream")
 async def chat(req: ChatRequest, db: Session = Depends(get_db)):
-    cs = db.query(Contract).all()
-    summary = f"PORTAFOLIO: Tienes {len(cs)} contratos. " + ", ".join([f"{c.filename} ({c.tenant_name})" for c in cs])
+    contracts = db.query(Contract).all()
+    total_mrr = sum([c.monthly_rent for c in contracts if c.monthly_rent and c.status == "completed"])
+    summary = f"SISTEMA DE GESTIÓN LEGAL - ESTADO ACTUAL:\n- Contratos totales: {len(contracts)}\n- Monto total MRR: {total_mrr} MXN\n- Detalle:\n"
+    for c in contracts:
+        summary += f"  * [{c.filename}] Arrendatario: {c.tenant_name or 'N/A'}, Renta: {c.monthly_rent or 0} {c.currency or 'MXN'}, Zona: {c.property_zone or 'N/A'}, Status: {c.status}\n"
     req.portfolio_summary = summary
     async def stream():
         async with httpx.AsyncClient(timeout=180.0) as client:
             try:
                 async with client.stream("POST", f"{ML_SERVICE_URL}/query-stream", json=req.dict(), headers={"X-Internal-Token": INTERNAL_TOKEN}) as r:
-                    if r.status_code != 200:
-                        yield b"⚠️ El servicio de ML esta procesando. Por favor reintenta en unos segundos."
-                        return
+                    if r.status_code != 200: yield "Servicio de ML ocupado.".encode("utf-8"); return
                     async for chunk in r.aiter_bytes(): yield chunk
-            except httpx.ReadTimeout:
-                yield b"⚠️ Tiempo de espera agotado. La GPU esta bajo mucha carga."
+            except: yield "Timeout GPU.".encode("utf-8")
     return StreamingResponse(stream(), media_type="text/plain")
 
 @app.get("/admin/users", response_model=List[UserResponse])
-async def list_users(current: User = Depends(get_current_admin_user), db: Session = Depends(get_db)):
+async def list_users(db: Session = Depends(get_db), current: User = Depends(get_current_admin_user)):
     return db.query(User).all()
 
 @app.delete("/admin/users/{user_id}", status_code=204)
