@@ -19,6 +19,8 @@ export default function Chat() {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isThinking, setIsThinking] = useState(false);
+  const [editingChatId, setEditingChatId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
   
   // MEMORIA DE SIDEBAR: Leer del localStorage al iniciar
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
