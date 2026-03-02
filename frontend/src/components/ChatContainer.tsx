@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, User, Zap, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { cn } from '../lib/utils';
 import { ChatMessage } from '../types';
 import { useAuth } from '../hooks/useAuth';
@@ -137,6 +139,12 @@ export default function ChatContainer({
                         <div className="h-2.5 bg-accent-electric/20 rounded-full w-full"></div>
                         <div className="h-2.5 bg-accent-electric/20 rounded-full w-[90%]"></div>
                         <div className="h-2.5 bg-accent-electric/20 rounded-full w-[75%]"></div>
+                      </div>
+                    ) : msg.role === 'assistant' ? (
+                      <div className="prose prose-invert prose-sm max-w-none prose-table:border prose-table:border-white/10 prose-th:bg-white/5 prose-th:p-2 prose-td:p-2 prose-td:border-t prose-td:border-white/5">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {msg.content}
+                        </ReactMarkdown>
                       </div>
                     ) : (
                       msg.content

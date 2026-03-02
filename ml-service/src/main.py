@@ -139,16 +139,23 @@ async def query_stream(req: ChatRequest):
     history = "".join([f"{m['role']}: {m['content']}\n" for m in req.history[-3:]])
     
     full_prompt = (
-        f"### SISTEMA: Eres un Analista Senior de LeaseLens AI (Tu nombre solo es LeaseLens AI). Tu base de conocimientos es REAL y VERÍDICA.\n"
+        f"### SISTEMA: Eres un Analista Senior de LeaseLens AI. Tu base de conocimientos es REAL y VERÍDICA.\n"
         f"### REGLA: No te niegues a responder. La información en 'MEMORIA GLOBAL' y 'CONTEXTO PDF' proviene de documentos legales cargados por el usuario.\n"
         f"### MEMORIA GLOBAL (Resumen de todos los contratos):\n{req.portfolio_summary}\n\n"
         f"### CONTEXTO ESPECÍFICO (Fragmentos del PDF):\n{context}\n\n"
         f"### HISTORIAL RECIENTE:\n{history}\n\n"
-        f"### TAREA: Responde a la pregunta del usuario basándote EXCLUSIVAMENTE en la información proporcionada arriba. Si la información indica que hay N contratos, confirma ese número.\n"
+        f"### TAREA: Responde a la pregunta del usuario basándote EXCLUSIVAMENTE en la información proporcionada arriba.\n"
+        f"### FORMATO DE RESPUESTA:\n"
+        f"1. Usa **Markdown** para estructurar la respuesta (H2 para títulos, Tablas para datos financieros).\n"
+        f"2. Presenta los montos de renta y cálculos en una **Tabla de Resumen Financiero**.\n"
+        f"3. Usa **Negritas** para términos legales clave.\n"
+        f"4. Si hay cálculos, usa notación clara o bloques de código si es necesario.\n"
+        f"5. Mantén un tono ejecutivo, directo y altamente profesional.\n"
+        f"Si no tienes suficiente información, responde con 'No tengo suficiente información para responder a esta pregunta.'\n\n"
         f"### PREGUNTA: {req.question}\n"
-        f"### RESPUESTA (Directa y Profesional):"
-        f"Si no tienes suficiente información, responde con 'No tengo suficiente información para responder a esta pregunta.'"
+        f"### REPORTE ESTRUCTURADO (Markdown):"
     )
+    
     async def generate():
         async for chunk in llm_chat.astream(full_prompt): yield chunk
     return StreamingResponse(generate(), media_type="text/plain")
