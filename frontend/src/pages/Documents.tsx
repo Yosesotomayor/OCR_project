@@ -77,6 +77,21 @@ export default function Documents() {
     });
   };
 
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`¿Eliminar ${selectedIds.length} contratos?`)) return;
+    setIsUploading(true);
+    try {
+      for (const id of selectedIds) {
+        await fetch(`${API_URL}/admin/contracts/${id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+      }
+      setSelectedIds([]);
+      fetchContracts();
+    } catch (err) { console.error(err); } finally { setIsUploading(false); }
+  };
+
   const fetchContracts = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/contracts`, {
@@ -150,13 +165,22 @@ export default function Documents() {
 
         <div className="flex items-center gap-4">
           {selectedIds.length > 0 && (
-            <motion.button 
-              initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-              onClick={handleBulkDownload}
-              className="bg-accent-electric text-black px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 hover:bg-white transition-all shadow-lg"
-            >
-              <Download size={14} /> DESCARGAR ({selectedIds.length})
-            </motion.button>
+            <div className="flex items-center gap-2">
+              <motion.button 
+                initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                onClick={handleBulkDownload}
+                className="bg-accent-electric text-black px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 hover:bg-white transition-all shadow-lg"
+              >
+                <Download size={14} /> DESCARGAR ({selectedIds.length})
+              </motion.button>
+              <motion.button 
+                initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                onClick={handleBulkDelete}
+                className="bg-red-500/10 text-red-500 border border-red-500/20 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 hover:bg-red-500 hover:text-white transition-all shadow-lg"
+              >
+                <Trash2 size={14} /> ELIMINAR
+              </motion.button>
+            </div>
           )}
           
           <div className="relative group p-4 border-2 border-dashed border-white/10 rounded-2xl hover:border-accent-electric/50 transition-all cursor-pointer">
