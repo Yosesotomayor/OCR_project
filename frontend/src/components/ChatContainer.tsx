@@ -5,9 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '../lib/utils';
 import { ChatMessage } from '../types';
-import { useAuth } from '../hooks/useAuth';
-
-const API_URL = import.meta.env.VITE_API_URL;
+import { useChat } from '../ChatContext';
 
 const suggestedPrompts = [
   { title: "Resumen de contratos", description: "En resumen, ¿Cuántos contratos tengo y quiénes son los arrendatarios?" },
@@ -17,23 +15,18 @@ const suggestedPrompts = [
 
 interface ChatContainerProps {
   messages: ChatMessage[];
-  setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   isThinking: boolean;
-  setIsThinking: React.Dispatch<React.SetStateAction<boolean>>;
-  activeChatId: string | null;
-  setActiveChatId: (id: string) => void;
+  thinkingStep: string;
   onSessionCreated: () => void;
 }
 
 export default function ChatContainer({ 
-  messages, setMessages, isThinking, setIsThinking, 
-  activeChatId, setActiveChatId, onSessionCreated 
+  messages, isThinking, thinkingStep, onSessionCreated 
 }: ChatContainerProps) {
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { token } = useAuth();
+  const { sendMessage } = useChat();
 
-  // FIX SCROLL: Forzar scroll al final en cada mensaje
   useEffect(() => {
     if (scrollRef.current) {
       const { scrollHeight, clientHeight } = scrollRef.current;
@@ -43,63 +36,14 @@ export default function ChatContainer({
 
   const handleSend = async (text?: string) => {
     const messageText = text || input;
-    if (!messageText.trim() || !token) return;
-
-    const userMsg: ChatMessage = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: messageText,
-      timestamp: new Date().toLocaleTimeString(),
-    };
-
-    setMessages(prev => [...prev, userMsg]);
+    if (!messageText.trim() || isThinking) return;
     setInput('');
-    setIsThinking(true);
-
-    const assistantId = (Date.now() + 1).toString();
-    setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: new Date().toLocaleTimeString() }]);
-
-    try {
-      const response = await fetch(`${API_URL}/chat/stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ 
-          question: messageText, 
-          history: messages.slice(-5),
-          chat_id: activeChatId 
-        })
-      });
-
-      if (!response.ok) throw new Error("GPU Offline");
-      
-      const newChatId = response.headers.get("X-Chat-ID");
-      if (newChatId && !activeChatId) {
-        setActiveChatId(newChatId);
-        onSessionCreated();
-      }
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let accumulatedContent = "";
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          accumulatedContent += decoder.decode(value, { stream: true });
-          setMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: accumulatedContent } : msg));
-        }
-      }
-    } catch (err) {
-      setMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: "⚠️ Error de conexión con la GPU." } : msg));
-    } finally {
-      setIsThinking(false);
-    }
+    await sendMessage(messageText);
+    onSessionCreated(); // Refrescar lista de sesiones por si es nuevo
   };
 
   return (
     <div className="flex flex-col h-full w-full max-w-5xl mx-auto relative font-sans">
-      {/* AREA DE MENSAJES CON SCROLL HABILITADO */}
       <div 
         ref={scrollRef} 
         className="flex-1 overflow-y-auto px-6 py-10 space-y-8 scrollbar-hide"
@@ -110,7 +54,12 @@ export default function ChatContainer({
             <Zap size={48} className="text-accent-electric animate-pulse" />
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
               {suggestedPrompts.map((p, i) => (
-                <button key={i} onClick={() => handleSend(p.description)} className="bg-white/2 border border-white/5 p-5 rounded-2xl text-left hover:border-accent-electric/50 transition-all shadow-xl">
+                <button 
+                  key={i} 
+                  onClick={() => handleSend(p.description)} 
+                  disabled={isThinking}
+                  className="bg-white/2 border border-white/5 p-5 rounded-2xl text-left hover:border-accent-electric/50 transition-all shadow-xl disabled:opacity-50"
+                >
                   <p className="text-sm font-bold text-gray-200 mb-1">{p.title}</p>
                   <p className="text-xs text-gray-500 line-clamp-2">{p.description}</p>
                 </button>
@@ -135,10 +84,15 @@ export default function ChatContainer({
                     msg.role === 'user' ? "bg-accent-electric text-black font-semibold rounded-tr-none" : "bg-white/2 text-gray-200 rounded-tl-none font-medium"
                   )}>
                     {msg.role === 'assistant' && msg.content === '' ? (
-                      <div className="space-y-3 w-full animate-pulse">
-                        <div className="h-2.5 bg-accent-electric/20 rounded-full w-full"></div>
-                        <div className="h-2.5 bg-accent-electric/20 rounded-full w-[90%]"></div>
-                        <div className="h-2.5 bg-accent-electric/20 rounded-full w-[75%]"></div>
+                      <div className="space-y-4 w-full">
+                        <div className="flex items-center gap-3 text-accent-electric/60 text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">
+                          <Loader2 className="animate-spin w-3 h-3" />
+                          {thinkingStep}
+                        </div>
+                        <div className="space-y-3 animate-pulse">
+                          <div className="h-2 bg-accent-electric/10 rounded-full w-full"></div>
+                          <div className="h-2 bg-accent-electric/10 rounded-full w-[90%]"></div>
+                        </div>
                       </div>
                     ) : msg.role === 'assistant' ? (
                       <div className="prose prose-invert prose-sm max-w-none prose-table:border prose-table:border-white/10 prose-th:bg-white/5 prose-th:p-2 prose-td:p-2 prose-td:border-t prose-td:border-white/5 prose-table:my-6">
@@ -157,7 +111,6 @@ export default function ChatContainer({
         )}
       </div>
 
-      {/* INPUT FIJO AL FINAL */}
       <footer className="px-6 pb-10 pt-4 shrink-0 bg-transparent">
         <div className="relative bg-white/5 border border-white/10 rounded-3xl p-2 flex items-center gap-3 focus-within:border-accent-electric/30 transition-all shadow-2xl backdrop-blur-md">
           <textarea
@@ -167,8 +120,12 @@ export default function ChatContainer({
             placeholder="Pregunta sobre tu portafolio legal..."
             className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-gray-200 py-3 px-4 text-sm resize-none shadow-none"
           />
-          <button onClick={() => handleSend()} className="p-4 bg-accent-electric text-black rounded-2xl hover:scale-105 active:scale-95 transition-all shadow-lg">
-            <Send size={20} />
+          <button 
+            onClick={() => handleSend()} 
+            disabled={isThinking || !input.trim()}
+            className="p-4 bg-accent-electric text-black rounded-2xl hover:scale-105 active:scale-95 transition-all shadow-lg disabled:opacity-50 disabled:grayscale"
+          >
+            {isThinking ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
           </button>
         </div>
       </footer>

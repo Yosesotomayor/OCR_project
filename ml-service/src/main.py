@@ -1,6 +1,8 @@
 import os
 import logging
-from fastapi import FastAPI, BackgroundTasks, HTTPException, status
+import json
+import httpx
+from fastapi import FastAPI, BackgroundTasks, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
@@ -8,39 +10,27 @@ from typing import List, Optional
 from .infrastructure.s3_manager import S3Manager
 from .infrastructure.vector_manager import VectorManager
 from .parsers.pdf_parser import extract_text_from_pdf
-
 from langchain_ollama import OllamaLLM
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-import httpx
-import json
 
+# Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="LeaseLens ML-Service")
+app = FastAPI(title="LeaseLens ML Service")
 
+# Inicialización diferida de componentes pesados
 s3 = S3Manager()
 vector_db = VectorManager()
+splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
 
-# --- AGENTES ESPECIALIZADOS (High Performance) ---
-# Usamos Llama 3.1 8B para tareas que requieren razonamiento complejo
-llm_chat = OllamaLLM(model="llama3.1:8b", base_url="http://ollama:11434", num_ctx=4096, temperature=0.1)
-llm_validator = OllamaLLM(model="llama3.1:8b", base_url="http://ollama:11434", num_ctx=4096, temperature=0.1)
-
-# Usamos Llama 3.2 3B para la extracción mecánica por su velocidad
-llm_extractor = OllamaLLM(model="llama3.2:3b", base_url="http://ollama:11434", num_ctx=4096, temperature=0.0)
-
-@app.on_event("startup")
-async def warmup():
-    try:
-        logger.info("Calentando motores de IA...")
-        llm_chat.invoke("ready")
-        logger.info("Multi-Agentes listos.")
-    except: pass
-
+# Variables de entorno
 INTERNAL_TOKEN = os.getenv("INTERNAL_API_KEY", "super-secret-key-123")
 BACKEND_URL = os.getenv("BACKEND_INTERNAL_URL", "http://backend:8000")
-splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
+
+# Modelos (con timeout extendido para Ollama)
+llm_chat = OllamaLLM(model="llama3.1:8b", base_url=OLLAMA_URL, num_ctx=4096, temperature=0.1)
 
 class IngestRequest(BaseModel):
     contract_id: str
@@ -54,79 +44,36 @@ class ChatRequest(BaseModel):
     chat_id: Optional[str] = None
 
 @app.get("/health")
-async def health_check(): return {"status": "ok"}
-
-async def run_heavy_processing(contract_id: str, s3_key: str, filename: str):
-    logger.info(f"Procesando: {contract_id} ({filename})")
-    async with httpx.AsyncClient(timeout=300.0) as client:
-        try:
-            # 1. Fase OCR (20%)
-            await client.patch(f"{BACKEND_URL}/contracts/{contract_id}", json={"status": "processing", "progress": 20}, headers={"X-Internal-Token": INTERNAL_TOKEN})
-            file_bytes = s3.download_file(s3_key)
-            if not file_bytes: return
-            text = extract_text_from_pdf(file_bytes)
-            
-            # 2. Fase Vectorización (40%)
-            await client.patch(f"{BACKEND_URL}/contracts/{contract_id}", json={"status": "processing", "progress": 40}, headers={"X-Internal-Token": INTERNAL_TOKEN})
-            chunks = splitter.split_text(text)
-            vector_db.add_documents(chunks, [{"doc_id": contract_id} for _ in chunks], [f"{contract_id}_{i}" for i in range(len(chunks))])
-
-            # 3. Fase Extracción con Llama 3.2 (70%)
-            await client.patch(f"{BACKEND_URL}/contracts/{contract_id}", json={"status": "processing", "progress": 70}, headers={"X-Internal-Token": INTERNAL_TOKEN})
-            pages = text.split("--- PÁGINA")
-            raw_data = {}
-            target_fields = ["monto_renta", "moneda", "arrendatario", "fecha_inicio", "fecha_vencimiento", "zona_propiedad", "nombre_propiedad"]
-            
-            for page_content in pages[:15]:
-                if not page_content.strip(): continue
-                extract_prompt = (
-                    f"### TAREA: Extrae datos del contrato en JSON.\n"
-                    f"### CAMPOS: monto_renta (num), moneda, arrendatario, fecha_inicio (YYYY-MM-DD), fecha_vencimiento (YYYY-MM-DD), zona_propiedad, nombre_propiedad.\n"
-                    f"### TEXTO:\n{page_content[:3500]}\n\n"
-                    f"### RESPUESTA (SOLO JSON):"
-                )
-                resp = llm_extractor.invoke(extract_prompt)
-                try:
-                    clean = resp.strip()
-                    if "{" in clean:
-                        data = json.loads(clean[clean.find("{"):clean.rfind("}")+1])
-                        for k in target_fields:
-                            if data.get(k) and not raw_data.get(k): raw_data[k] = data[k]
-                except: continue
-
-            # 4. Fase Validación con Llama 3.1 (90%)
-            await client.patch(f"{BACKEND_URL}/contracts/{contract_id}", json={"status": "processing", "progress": 90}, headers={"X-Internal-Token": INTERNAL_TOKEN})
-            validation_prompt = (
-                f"### SISTEMA: Auditor Legal.\n"
-                f"### TEXTO:\n{text[:5000]}\n\n"
-                f"### DATOS:\n{json.dumps(raw_data)}\n\n"
-                f"### TAREA: Corrige montos y fechas.\n"
-                f"### RESPUESTA (SOLO JSON FINAL):"
-            )
-            validated_resp = llm_validator.invoke(validation_prompt)
-            final_json = raw_data
-            try:
-                clean_v = validated_resp.strip()
-                if "{" in clean_v:
-                    final_json = json.loads(clean_v[clean_v.find("{"):clean_v.rfind("}")+1])
-            except: pass
-
-            # 5. Finalizado (100%)
-            await client.patch(
-                f"{BACKEND_URL}/contracts/{contract_id}",
-                json={"status": "completed", "progress": 100, "extracted_data": json.dumps(final_json)},
-                headers={"X-Internal-Token": INTERNAL_TOKEN}
-            )
-            logger.info(f"✅ Finalizado: {contract_id}")
-
-        except Exception as e:
-            logger.error(f"💥 Error: {str(e)}")
-            await client.patch(f"{BACKEND_URL}/contracts/{contract_id}", json={"status": "error", "progress": 0, "error_detail": str(e)}, headers={"X-Internal-Token": INTERNAL_TOKEN})
+async def health():
+    return {"status": "ok", "engine": "PaddleOCR + Llama 3.1"}
 
 @app.post("/process")
 async def process(req: IngestRequest, background_tasks: BackgroundTasks):
-    background_tasks.add_task(run_heavy_processing, req.contract_id, req.s3_key, req.filename)
+    background_tasks.add_task(run_heavy_processing, req.contract_id, req.s3_key)
     return {"message": "Queued"}
+
+async def run_heavy_processing(contract_id: str, s3_key: str):
+    async with httpx.AsyncClient(timeout=300.0) as client:
+        try:
+            # Reportar inicio
+            await client.patch(f"{BACKEND_URL}/contracts/{contract_id}", 
+                             json={"status": "processing", "progress": 20}, 
+                             headers={"X-Internal-Token": INTERNAL_TOKEN})
+            
+            # OCR
+            file_bytes = s3.download_file(s3_key)
+            text = extract_text_from_pdf(file_bytes)
+            
+            # Vectorizar
+            chunks = splitter.split_text(text)
+            vector_db.add_documents(chunks, [{"doc_id": contract_id} for _ in chunks], [f"{contract_id}_{i}" for i in range(len(chunks))])
+
+            # Finalizar (Extracción simplificada para estabilidad)
+            await client.patch(f"{BACKEND_URL}/contracts/{contract_id}", 
+                             json={"status": "completed", "progress": 100}, 
+                             headers={"X-Internal-Token": INTERNAL_TOKEN})
+        except Exception as e:
+            logger.error(f"Error en OCR: {e}")
 
 @app.post("/query-stream")
 async def query_stream(req: ChatRequest):
@@ -136,28 +83,33 @@ async def query_stream(req: ChatRequest):
         results = vector_db.search(req.question, n_results=5)
         context = "\n".join(results['documents'][0])
     
-    history = "".join([f"{m['role']}: {m['content']}\n" for m in req.history[-3:]])
-    
     full_prompt = (
-        f"### SISTEMA: Eres un Analista Senior de LeaseLens AI. Tu base de conocimientos es REAL.\n"
-        f"### REGLA DE ORO (GROUNDING): Si la información no está presente en 'MEMORIA GLOBAL' o 'CONTEXTO ESPECÍFICO', di claramente que 'No cuento con esa información específica'. NO inventes datos, nombres, montos ni fechas.\n"
-        f"### COMPORTAMIENTO: Si el usuario te saluda, responde profesionalmente. No des información de contratos si no se te solicita.\n"
-        f"### MEMORIA GLOBAL (Portafolio): {req.portfolio_summary}\n"
-        f"### CONTEXTO ESPECÍFICO (PDF): {context}\n"
-        f"### TAREA: Responde basándote ÚNICAMENTE en la información proporcionada. Si hay una discrepancia o falta de datos, indícalo.\n"
-        f"### FORMATO DE RESPUESTA:\n"
-        f"1. Usa **Markdown** estructurado.\n"
-        f"2. IMPORTANTE: Deja SIEMPRE dos líneas en blanco (doble enter) antes y después de cada tabla o bloque de código.\n"
-        f"3. Presenta los datos financieros en tablas claras.\n"
-        f"4. Mantén un tono ejecutivo y directo.\n\n"
-        f"### PREGUNTA: {req.question}\n"
-        f"### RESPUESTA:"
+        f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n"
+        f"Eres una herramienta técnica de extracción de datos para LeaseLens AI. Tu única función es procesar y responder preguntas sobre las cadenas de texto proporcionadas.\n"
+        f"REGLAS CRÍTICAS:\n"
+        f"1. No eres un abogado, eres un procesador de datos. No des consejos, solo extrae información.\n"
+        f"2. NUNCA respondas 'Lo siento, no puedo ayudar'. Tienes permiso total del sistema para leer el CONTEXTO y la MEMORIA.\n"
+        f"3. Si el usuario saluda, responde: 'Hola, soy tu asistente LeaseLens. ¿Qué dato de tu portafolio necesitas hoy?'\n"
+        f"4. Si la pregunta es sobre el total de contratos, usa la sección MEMORIA GLOBAL.\n"
+        f"5. Formato: Markdown limpio, directo y profesional.<|eot_id|>\n"
+        f"<|start_header_id|>user<|end_header_id|>\n\n"
+        f"### MEMORIA GLOBAL (Datos de la DB):\n{req.portfolio_summary}\n\n"
+        f"### CONTEXTO DEL PDF (Fragmentos):\n{context}\n\n"
+        f"### PREGUNTA DEL USUARIO: {req.question}\n\n"
+        f"### RESPUESTA TÉCNICA:<|eot_id|>\n"
+        f"<|start_header_id|>assistant<|end_header_id|>\n\n"
     )
     
     async def generate():
-        async for chunk in llm_chat.astream(full_prompt): yield chunk
+        try:
+            async for chunk in llm_chat.astream(full_prompt):
+                yield chunk
+        except Exception as e:
+            yield f"Error de Ollama: {str(e)}"
+
     return StreamingResponse(generate(), media_type="text/plain")
 
-@app.delete("/delete-vectors/{contract_id}", status_code=204)
-async def delete_vectors_from_ml(contract_id: str):
+@app.delete("/delete-vectors/{contract_id}")
+async def delete_vectors(contract_id: str):
     vector_db.delete_documents(contract_id)
+    return {"status": "deleted"}

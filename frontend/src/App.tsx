@@ -11,6 +11,7 @@ import Landing from './pages/Landing';
 import Subscription from './pages/Subscription'; 
 import Forbidden from './pages/Forbidden'; 
 import { AuthProvider, useAuth } from './hooks/useAuth.tsx'; 
+import { ChatProvider } from './ChatContext';
 import { Zap } from 'lucide-react';
 
 const VITE_ENABLE_LANDING_PAGE = import.meta.env.VITE_ENABLE_LANDING_PAGE === 'true';
@@ -40,7 +41,6 @@ const ProtectedRoute = ({
   }
 
   if (!isAuthenticated) {
-    // replace evita que el usuario regrese al login con el botón "atrás"
     return <Navigate to="/login" replace />; 
   }
 
@@ -55,71 +55,64 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
-          {/* --- RUTAS PÚBLICAS --- */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/forbidden" element={<Forbidden />} />
-          
-          {/* Ruta Raíz Condicional */}
-          <Route 
-            path="/" 
-            element={
-              VITE_ENABLE_LANDING_PAGE ? (
-                <Landing />
-              ) : (
-                <Navigate to="/dashboard" replace />
-              )
-            } 
-          />
-
-          {/* --- RUTAS AUTENTICADAS (Layout Anidado) --- */}
-          {/* Importante: DashboardLayout DEBE contener el componente <Outlet /> 
-              para que Chat, Documents, etc., se rendericen en su interior. 
-          */}
-          <Route 
-            path="/dashboard" 
-            element={
-              <ProtectedRoute>
-                <DashboardLayout />
-              </ProtectedRoute>
-            }
-          >
-            {/* Ruta por defecto al entrar a /dashboard */}
-            <Route index element={<Dashboard />} />
+        <ChatProvider>
+          <Routes>
+            {/* --- RUTAS PÚBLICAS --- */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/forbidden" element={<Forbidden />} />
             
-            {/* Rutas Hijas (Se renderizan en el Outlet de DashboardLayout) */}
-            <Route path="chat" element={<Chat />} />
-            <Route path="documents" element={<Documents />} />
-            <Route path="subscription" element={<Subscription />} />
-            
-            {/* Ruta de Administración con doble validación */}
             <Route 
-              path="admin" 
+              path="/" 
               element={
-                <ProtectedRoute adminOnly={true}>
-                  <Admin />
-                </ProtectedRoute>
+                VITE_ENABLE_LANDING_PAGE ? (
+                  <Landing />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
               } 
             />
+
+            {/* --- RUTAS AUTENTICADAS --- */}
             <Route 
-              path="admin/logs" 
+              path="/dashboard" 
               element={
-                <ProtectedRoute adminOnly={true}>
-                  <AdminLogs />
+                <ProtectedRoute>
+                  <DashboardLayout />
                 </ProtectedRoute>
               } 
-            />
-          </Route>
+            >
+              <Route index element={<Dashboard />} />
+              <Route path="chat" element={<Chat />} />
+              <Route path="documents" element={<Documents />} />
+              <Route path="subscription" element={<Subscription />} />
+              
+              <Route 
+                path="admin" 
+                element={
+                  <ProtectedRoute adminOnly={true}>
+                    <Admin />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="admin/logs" 
+                element={
+                  <ProtectedRoute adminOnly={true}>
+                    <AdminLogs />
+                  </ProtectedRoute>
+                } 
+              />
+            </Route>
 
-          {/* --- FALLBACK (404) --- */}
-          <Route 
-            path="*" 
-            element={
-              <Navigate to={VITE_ENABLE_LANDING_PAGE ? "/" : "/dashboard"} replace />
-            } 
-          />
-        </Routes>
+            <Route 
+              path="*" 
+              element={
+                <Navigate to={VITE_ENABLE_LANDING_PAGE ? "/" : "/dashboard"} replace />
+              } 
+            />
+          </Routes>
+        </ChatProvider>
       </AuthProvider>
     </BrowserRouter>
   );

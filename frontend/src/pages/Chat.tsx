@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { cn } from '../lib/utils';
 import { MessageSquare, Plus, Trash2, Zap, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import ChatContainer from '../components/ChatContainer';
-import { ChatMessage } from '../types';
 import { useAuth } from '../hooks/useAuth';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useChat } from '../ChatContext';
+import { motion } from 'framer-motion';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -16,35 +16,23 @@ interface IChatSession {
 
 export default function Chat() {
   const [sessions, setSessions] = useState<IChatSession[]>([]);
-  const [activeChatId, setActiveChatId] = useState<string | null>(() => {
-    return localStorage.getItem('last_active_chat_id');
-  });
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isThinking, setIsThinking] = useState(false);
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   
-  // MEMORIA DE SIDEBAR: Leer del localStorage al iniciar
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     const saved = localStorage.getItem('chat_sidebar_open');
     return saved !== null ? JSON.parse(saved) : true;
   });
 
   const { token } = useAuth();
+  const { 
+    messages, setMessages, isThinking, thinkingStep, 
+    activeChatId, setActiveChatId, loadChat 
+  } = useChat();
 
-  // Guardar preferencia de sidebar
   useEffect(() => {
     localStorage.setItem('chat_sidebar_open', JSON.stringify(isSidebarOpen));
   }, [isSidebarOpen]);
-
-  // Guardar ID del chat activo
-  useEffect(() => {
-    if (activeChatId) {
-      localStorage.setItem('last_active_chat_id', activeChatId);
-    } else {
-      localStorage.removeItem('last_active_chat_id');
-    }
-  }, [activeChatId]);
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -52,15 +40,9 @@ export default function Chat() {
       if (res.ok) {
         const data = await res.json();
         setSessions(data);
-        
-        // Si hay un ID guardado pero no hemos cargado los mensajes aún
-        const savedId = localStorage.getItem('last_active_chat_id');
-        if (savedId && !activeChatId) {
-          loadChat(savedId);
-        }
       }
     } catch (err) { console.error(err); }
-  }, [token, activeChatId]);
+  }, [token]);
 
   const handleRename = async (id: string) => {
     if (!editTitle.trim()) return setEditingChatId(null);
@@ -75,26 +57,10 @@ export default function Chat() {
     } catch (err) { console.error(err); }
   };
 
-  const loadChat = async (chatId: string) => {
-    setActiveChatId(chatId);
-    setMessages([]);
-    try {
-      const res = await fetch(`${API_URL}/chats/${chatId}/messages`, { headers: { 'Authorization': `Bearer ${token}` } });
-      if (res.ok) {
-        const history = await res.json();
-        setMessages(history.map((m: any) => ({
-          id: Math.random().toString(),
-          role: m.role,
-          content: m.content,
-          timestamp: new Date(m.timestamp).toLocaleTimeString()
-        })));
-      }
-    } catch (err) { console.error(err); }
-  };
-
   const startNewChat = () => {
     setActiveChatId(null);
     setMessages([]);
+    localStorage.removeItem('last_active_chat_id');
   };
 
   const deleteChat = async (id: string, e: React.MouseEvent) => {
@@ -110,33 +76,27 @@ export default function Chat() {
     if (token) fetchSessions(); 
   }, [token, fetchSessions]);
 
-  // Cargar el chat guardado al inicio una sola vez cuando las sesiones estén listas
   useEffect(() => {
     const savedId = localStorage.getItem('last_active_chat_id');
-    if (savedId && sessions.length > 0 && !activeChatId) {
+    if (savedId && sessions.length > 0 && messages.length === 0 && !activeChatId) {
       const sessionExists = sessions.some(s => s.id === savedId);
       if (sessionExists) {
         loadChat(savedId);
-      } else {
-        localStorage.removeItem('last_active_chat_id');
       }
     }
-  }, [sessions]);
+  }, [sessions, activeChatId, messages.length, loadChat]);
 
   return (
     <div className="flex h-full bg-[#050505] text-white font-sans overflow-hidden relative">
-      {/* BOTON FLOTANTE PARA ABRIR SIDEBAR SI ESTA CERRADO */}
       {!isSidebarOpen && (
         <button 
           onClick={() => setIsSidebarOpen(true)}
           className="absolute left-4 top-4 z-50 p-2 bg-white/5 hover:bg-white/10 rounded-lg text-gray-400 border border-white/5 transition-all shadow-2xl"
-          title="Abrir Historial"
         >
           <PanelLeftOpen size={20} />
         </button>
       )}
 
-      {/* SIDEBAR COLAPSABLE */}
       <motion.aside 
         initial={false}
         animate={{ width: isSidebarOpen ? 288 : 0, opacity: isSidebarOpen ? 1 : 0 }}
@@ -153,7 +113,6 @@ export default function Chat() {
           <button 
             onClick={() => setIsSidebarOpen(false)}
             className="ml-2 p-2.5 text-gray-500 hover:text-white hover:bg-white/5 rounded-xl transition-all"
-            title="Cerrar Historial"
           >
             <PanelLeftClose size={18} />
           </button>
@@ -186,16 +145,13 @@ export default function Chat() {
                   <span className="text-xs font-medium truncate">{s.title}</span>
                 )}
               </div>
-              
               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                {!editingChatId && (
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); setEditingChatId(s.id); setEditTitle(s.title); }}
-                    className="p-1 hover:text-accent-electric transition-colors"
-                  >
-                    <Plus size={14} className="rotate-45" /> {/* Icono de edición simple */}
-                  </button>
-                )}
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setEditingChatId(s.id); setEditTitle(s.title); }}
+                  className="p-1 hover:text-accent-electric transition-colors"
+                >
+                  <Plus size={14} className="rotate-45" />
+                </button>
                 <button 
                   onClick={(e) => deleteChat(s.id, e)}
                   className="p-1 hover:text-red-500 transition-colors"
@@ -215,15 +171,11 @@ export default function Chat() {
         </div>
       </motion.aside>
 
-      {/* CONVERSACIÓN ACTIVA */}
       <main className="flex-1 flex flex-col relative min-w-0 h-full overflow-hidden">
         <ChatContainer 
           messages={messages} 
-          setMessages={setMessages} 
           isThinking={isThinking} 
-          setIsThinking={setIsThinking}
-          activeChatId={activeChatId}
-          setActiveChatId={setActiveChatId}
+          thinkingStep={thinkingStep}
           onSessionCreated={fetchSessions}
         />
       </main>
