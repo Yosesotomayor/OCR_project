@@ -11,7 +11,7 @@ logging.getLogger("ppocr").setLevel(logging.ERROR)
 # Inicializar PaddleOCR (Español e Inglés)
 # use_angle_cls=True ayuda a detectar texto rotado
 # lang="es" para optimizar detección en español
-ocr = PaddleOCR(use_angle_cls=True, lang="es", show_log=False)
+ocr = PaddleOCR(use_angle_cls=True, lang="es")
 
 def extract_text_from_pdf(file_content: bytes) -> str:
     """

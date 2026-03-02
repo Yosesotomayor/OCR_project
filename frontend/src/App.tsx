@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard';
 import Chat from './pages/Chat';
 import Documents from './pages/Documents';
 import Admin from './pages/Admin';
+import AdminLogs from './pages/AdminLogs';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Landing from './pages/Landing'; 
@@ -98,6 +99,14 @@ export default function App() {
               element={
                 <ProtectedRoute adminOnly={true}>
                   <Admin />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="admin/logs" 
+              element={
+                <ProtectedRoute adminOnly={true}>
+                  <AdminLogs />
                 </ProtectedRoute>
               } 
             />
