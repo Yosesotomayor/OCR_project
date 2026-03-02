@@ -62,20 +62,28 @@ export default function AdminLogs() {
     let response = '';
     
     if (cmd === 'ping') response = '[PONG] Kernel Latency: 4ms | Connection: Stable';
-    else if (cmd === 'status') response = '[STATUS] API: Online | ML-Service: Ready | DB: Connected (pgvector)';
     else if (cmd === 'clear') { setLogs('Terminal cleared. Awaiting system events...'); setCommand(''); return; }
-    else if (cmd === 'help') response = 'Available commands: ping, status, clear, help, whoami, routes, agents';
+    else if (cmd === 'help') response = 'Available commands: ping, metrics, vram, routes, agents, whoami, clear';
     else if (cmd === 'whoami') response = `Current Admin Session: Active`;
-    else if (cmd === 'routes' || cmd === 'agents') {
+    else if (cmd === 'routes' || cmd === 'agents' || cmd === 'metrics' || cmd === 'vram') {
       try {
         const res = await fetch(`${API_URL}/admin/system/status`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await res.json();
+        
         if (cmd === 'routes') response = `[ENDPOINTS]\n${data.routes.join('\n')}`;
-        else response = `[AGENTS HEALTH] Status: ${data.agents}`;
+        else if (cmd === 'agents') response = `[AGENTS HEALTH] Status: ${data.agents}`;
+        else if (cmd === 'vram') response = `[GPU TELEMETRY] Loaded Models: ${data.metrics.vram_active_models}`;
+        else if (cmd === 'metrics') {
+          response = `[SYSTEM METRICS]\n` +
+                     `> Usuarios Registrados: ${data.metrics.usuarios}\n` +
+                     `> Contratos en DB: ${data.metrics.contratos_totales}\n` +
+                     `> Procesamientos Exitosos: ${data.metrics.ocr_exitosos}\n` +
+                     `> Eficiencia OCR: ${((data.metrics.ocr_exitosos / data.metrics.contratos_totales) * 100 || 0).toFixed(1)}%`;
+        }
       } catch (err) {
-        response = '[ERROR] Failed to fetch system status from backend.';
+        response = '[ERROR] Failed to fetch system telemetry from kernel.';
       }
     }
     else response = `[SHELL] Command not found: ${cmd}. Type 'help' for options.`;

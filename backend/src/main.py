@@ -291,29 +291,46 @@ async def get_system_logs(current: User = Depends(get_current_admin_user)):
     return {"logs": "\n".join(logs)}
 
 @app.get("/admin/system/status")
-async def get_system_status(current: User = Depends(get_current_admin_user)):
+async def get_system_status(db: Session = Depends(get_db), current: User = Depends(get_current_admin_user)):
     """
-    Inspecciona rutas y verifica salud de agentes de IA.
+    Consola de Comando: Telemetría real del sistema.
     """
-    # 1. Obtener todas las rutas
-    routes = []
-    for route in app.routes:
-        if hasattr(route, "methods"):
-            routes.append(f"{list(route.methods)[0]} {route.path}")
+    # 1. Telemetría de Base de Datos
+    user_count = db.query(User).count()
+    contract_count = db.query(Contract).count()
+    completed_ocr = db.query(Contract).filter(Contract.status == "completed").count()
     
-    # 2. Verificar agentes (ML Service y Ollama)
+    # 2. Verificar Salud de Microservicios
     agents_status = "OFFLINE"
+    vram_usage = "N/A"
     try:
         async with httpx.AsyncClient(timeout=2.0) as client:
-            resp = await client.get(f"{ML_SERVICE_URL}/health")
-            if resp.status_code == 200:
-                agents_status = "OPERATIVO (Llama 3.1 & 3.2 Activos)"
+            # Salud de ML Service
+            ml_resp = await client.get(f"{ML_SERVICE_URL}/health")
+            if ml_resp.status_code == 200:
+                agents_status = "OPERATIVO"
+            
+            # Consultar Ollama directamente para ver modelos en VRAM
+            # (Asumiendo que ollama está accesible desde el backend o via proxy ml)
+            ollama_resp = await client.get("http://ollama:11434/api/ps")
+            if ollama_resp.status_code == 200:
+                models = ollama_resp.json().get("models", [])
+                if models:
+                    vram_usage = ", ".join([f"{m['name']} ({round(m['size']/(1024**3), 2)}GB)" for m in models])
+                else:
+                    vram_usage = "0GB (Models on Standby)"
     except:
-        agents_status = "ERROR DE ENLACE (ML-Service No Responde)"
+        agents_status = "ML_SERVICE_UNREACHABLE"
 
     return {
-        "routes": routes,
-        "agents": agents_status
+        "metrics": {
+            "usuarios": user_count,
+            "contratos_totales": contract_count,
+            "ocr_exitosos": completed_ocr,
+            "vram_active_models": vram_usage
+        },
+        "agents": agents_status,
+        "routes": [f"{list(r.methods)[0]} {r.path}" for r in app.routes if hasattr(r, "methods")]
     }
 
 # --- ADMIN USER MANAGEMENT ---
