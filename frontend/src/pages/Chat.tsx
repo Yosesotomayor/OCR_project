@@ -19,10 +19,19 @@ export default function Chat() {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isThinking, setIsThinking] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [editingChatId, setEditingChatId] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState('');
+  
+  // MEMORIA DE SIDEBAR: Leer del localStorage al iniciar
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    const saved = localStorage.getItem('chat_sidebar_open');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
   const { token } = useAuth();
+
+  // Guardar preferencia cada vez que cambie
+  useEffect(() => {
+    localStorage.setItem('chat_sidebar_open', JSON.stringify(isSidebarOpen));
+  }, [isSidebarOpen]);
 
   const fetchSessions = useCallback(async () => {
     try {

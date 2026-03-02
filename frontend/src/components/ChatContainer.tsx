@@ -31,9 +31,11 @@ export default function ChatContainer({
   const scrollRef = useRef<HTMLDivElement>(null);
   const { token } = useAuth();
 
+  // FIX SCROLL: Forzar scroll al final en cada mensaje
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+      const { scrollHeight, clientHeight } = scrollRef.current;
+      scrollRef.current.scrollTo({ top: scrollHeight - clientHeight, behavior: 'smooth' });
     }
   }, [messages, isThinking]);
 
@@ -68,7 +70,6 @@ export default function ChatContainer({
 
       if (!response.ok) throw new Error("GPU Offline");
       
-      // Capturar el Chat-ID de la cabecera si es nuevo
       const newChatId = response.headers.get("X-Chat-ID");
       if (newChatId && !activeChatId) {
         setActiveChatId(newChatId);
@@ -95,16 +96,21 @@ export default function ChatContainer({
   };
 
   return (
-    <div className="flex flex-col h-full max-w-5xl mx-auto px-6 relative font-sans antialiased">
-      <div ref={scrollRef} className="flex-1 overflow-y-auto py-10 space-y-8 scrollbar-hide">
+    <div className="flex flex-col h-full w-full max-w-5xl mx-auto relative font-sans">
+      {/* AREA DE MENSAJES CON SCROLL HABILITADO */}
+      <div 
+        ref={scrollRef} 
+        className="flex-1 overflow-y-auto px-6 py-10 space-y-8 scrollbar-hide"
+        style={{ scrollBehavior: 'smooth' }}
+      >
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center space-y-8">
             <Zap size={48} className="text-accent-electric animate-pulse" />
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-3xl">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
               {suggestedPrompts.map((p, i) => (
-                <button key={i} onClick={() => handleSend(p.description)} className="bg-white/2 border border-white/5 p-5 rounded-2xl text-left hover:border-accent-electric/50 transition-all group shadow-xl">
+                <button key={i} onClick={() => handleSend(p.description)} className="bg-white/2 border border-white/5 p-5 rounded-2xl text-left hover:border-accent-electric/50 transition-all shadow-xl">
                   <p className="text-sm font-bold text-gray-200 mb-1">{p.title}</p>
-                  <p className="text-xs text-gray-500">{p.description}</p>
+                  <p className="text-xs text-gray-500 line-clamp-2">{p.description}</p>
                 </button>
               ))}
             </div>
@@ -123,7 +129,7 @@ export default function ChatContainer({
                 
                 <div className="space-y-2 flex-grow">
                   <div className={cn(
-                    "rounded-3xl px-6 py-5 text-sm leading-7 break-words shadow-2xl transition-all border-none",
+                    "rounded-3xl px-6 py-5 text-sm leading-7 break-words shadow-2xl transition-all border-none antialiased",
                     msg.role === 'user' ? "bg-accent-electric text-black font-semibold rounded-tr-none" : "bg-white/2 text-gray-200 rounded-tl-none font-medium"
                   )}>
                     {msg.role === 'assistant' && msg.content === '' ? (
@@ -143,8 +149,9 @@ export default function ChatContainer({
         )}
       </div>
 
-      <footer className="pb-10 pt-4">
-        <div className="relative bg-white/2 border border-white/5 rounded-3xl p-2 flex items-center gap-3 focus-within:border-accent-electric/30 transition-all shadow-2xl">
+      {/* INPUT FIJO AL FINAL */}
+      <footer className="px-6 pb-10 pt-4 shrink-0 bg-transparent">
+        <div className="relative bg-white/5 border border-white/10 rounded-3xl p-2 flex items-center gap-3 focus-within:border-accent-electric/30 transition-all shadow-2xl backdrop-blur-md">
           <textarea
             rows={1} value={input}
             onChange={(e) => setInput(e.target.value)}
