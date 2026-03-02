@@ -26,8 +26,7 @@ export default function AdminLogs() {
       setLogs(data.logs);
     } catch (err) {
       console.error('Error fetching logs:', err);
-      setLogs(prev => prev + '
-[ERROR] Fallo en la conexión con el servidor de logs.');
+      setLogs(prev => prev + '\n[ERROR] Fallo en la conexión con el servidor de logs.');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -94,8 +93,7 @@ export default function AdminLogs() {
             </div>
           ) : (
             <>
-              {logs.split('
-').map((line, i) => (
+              {logs.split('\n').map((line, i) => (
                 <div key={i} className="flex gap-4 group/line">
                   <span className="text-gray-700 select-none w-8 text-right italic">{i + 1}</span>
                   <span className={cn(
@@ -109,8 +107,7 @@ export default function AdminLogs() {
                 </div>
               ))}
               <div className="flex gap-4 animate-pulse pt-2">
-                <span className="text-gray-700 select-none w-8 text-right">{logs.split('
-').length + 1}</span>
+                <span className="text-gray-700 select-none w-8 text-right">{logs.split('\n').length + 1}</span>
                 <span className="text-accent-electric">_</span>
               </div>
             </>
