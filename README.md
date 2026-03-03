@@ -1,4 +1,4 @@
-# LeaseLens AI: Intelligence Legal & Financial OCR 🚀
+# LeaseLens AI: Intelligence Legal & Financial OCR 
 
 LeaseLens AI es un sistema de inteligencia avanzada diseñado para automatizar el ciclo de vida de los contratos de arrendamiento. Utilizando una arquitectura multi-agente y RAG Híbrido, el sistema extrae, valida y analiza datos contractuales con precisión quirúrgica, optimizado para el contexto de innovación bancaria (Mifel).
 
