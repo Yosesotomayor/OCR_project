@@ -85,7 +85,14 @@ export default function App() {
               <Route index element={<Dashboard />} />
               <Route path="chat" element={<Chat />} />
               <Route path="documents" element={<Documents />} />
-              <Route path="subscription" element={<Subscription />} />
+              <Route 
+                path="subscription" 
+                element={
+                  <ProtectedRoute adminOnly={true}>
+                    <Subscription />
+                  </ProtectedRoute>
+                } 
+              />
               
               <Route 
                 path="admin" 

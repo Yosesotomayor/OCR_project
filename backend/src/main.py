@@ -28,6 +28,10 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="LeaseLens API Gateway")
 
+@app.get("/health")
+async def health():
+    return {"status": "ok", "timestamp": datetime.now()}
+
 # --- ÚNICA CONFIGURACIÓN DE CORS ---
 app.add_middleware(
     CORSMiddleware,
@@ -410,6 +414,22 @@ async def patch_user_admin_status(user_id: str, data: dict, db: Session = Depend
     if "is_admin" in data: user.is_admin = data["is_admin"]
     db.commit(); db.refresh(user)
     return user
+
+@app.patch("/admin/users/{user_id}/subscription", response_model=UserResponse)
+async def update_user_subscription_admin(user_id: str, data: dict, db: Session = Depends(get_db), current: User = Depends(get_current_admin_user)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user: raise HTTPException(404)
+    if "subscription_plan" in data:
+        user.subscription_plan = data["subscription_plan"]
+    db.commit(); db.refresh(user)
+    return user
+
+@app.post("/subscription/update", response_model=UserResponse)
+async def update_my_subscription(data: dict, db: Session = Depends(get_db), current: User = Depends(get_current_active_user)):
+    if "subscription_plan" in data:
+        current.subscription_plan = data["subscription_plan"]
+        db.commit(); db.refresh(current)
+    return current
 
 @app.delete("/admin/users/{user_id}", status_code=204)
 async def delete_user(user_id: str, db: Session = Depends(get_db), current: User = Depends(get_current_admin_user)):

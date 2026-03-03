@@ -24,6 +24,9 @@ class S3Manager:
             config=Config(signature_version='s3v4', s3={'addressing_style': 'path'})
         )
 
+        # Endpoint para que el navegador acceda (localhost o IP pública)
+        self.external_endpoint = os.getenv("MINIO_EXTERNAL_URL", "http://localhost:9000")
+
     def upload_file(self, file_content: bytes, object_name: str) -> bool:
         try:
             self.s3_client.put_object(
@@ -39,14 +42,13 @@ class S3Manager:
 
     def generate_presigned_url(self, object_name: str, expires_in: int = 3600) -> Optional[str]:
         """
-        Genera una URL firmada. Para evitar SignatureDoesNotMatch en Docker,
-        firmamos con el endpoint que el navegador usará (localhost:9000).
+        Genera una URL firmada utilizando el endpoint externo.
         """
         try:
-            # Cliente de firma 'externo'
+            # Cliente de firma 'externo' para que la URL sea válida desde el browser
             signing_client = boto3.client(
                 "s3",
-                endpoint_url="http://localhost:9000",
+                endpoint_url=self.external_endpoint,
                 aws_access_key_id=self.access_key,
                 aws_secret_access_key=self.secret_key,
                 region_name="us-east-1",

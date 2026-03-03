@@ -35,6 +35,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const startNewChat = useCallback(() => {
     setActiveChatId(null);
+    localStorage.removeItem('last_active_chat_id');
     setMessages([]);
   }, []);
 
