@@ -11,7 +11,7 @@ class Contract(Base):
     progress = Column(Integer, default=0)
     tenant_name = Column(String, nullable=True)
     monthly_rent = Column(Numeric(precision=12, scale=2), nullable=True)
-    currency = Column(String(3), nullable=True)
+    currency = Column(String(10), nullable=True)
     start_date = Column(Date, nullable=True) # NUEVO: Fecha de Inicio
     expiry_date = Column(Date, nullable=True)
     property_name = Column(String, nullable=True)

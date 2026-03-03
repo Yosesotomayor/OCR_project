@@ -433,25 +433,20 @@ async def update_ml(contract_id: str, update: ContractUpdate, db: Session = Depe
         try:
             data = json.loads(update.extracted_data)
             
-            # SANITIZACIÓN: Si arrendatario es un dict, extraer solo el nombre
-            arrendatario = data.get("arrendatario")
-            if isinstance(arrendatario, dict):
-                c.tenant_name = arrendatario.get("nombre") or str(arrendatario)
-            else:
-                c.tenant_name = str(arrendatario) if arrendatario else None
-
-            c.monthly_rent = clean_numeric(data.get("monto_renta"))
-            c.currency = str(data.get("moneda")) if data.get("moneda") else "MXN"
-            c.property_name = str(data.get("nombre_propiedad")) if data.get("nombre_propiedad") else None
-            c.property_zone = str(data.get("zona_propiedad")) if data.get("zona_propiedad") else None
+            # Mapeo unificado con el Agente de IA (Inglés)
+            c.tenant_name = str(data.get("tenant_name")) if data.get("tenant_name") else c.tenant_name
+            c.monthly_rent = clean_numeric(data.get("monthly_rent"))
+            c.currency = str(data.get("currency")) if data.get("currency") else "MXN"
+            c.property_name = str(data.get("property_name")) if data.get("property_name") else None
+            c.property_zone = str(data.get("property_zone")) if data.get("property_zone") else None
             
             # Parseo robusto de fechas (YYYY-MM-DD)
-            for date_field in ["fecha_inicio", "fecha_vencimiento"]:
+            for date_field in ["start_date", "expiry_date"]:
                 val = data.get(date_field)
-                if val and isinstance(val, str):
+                if val and isinstance(val, str) and val != "string": # Evitar placeholders
                     try:
                         parsed_date = datetime.strptime(val, "%Y-%m-%d").date()
-                        if date_field == "fecha_inicio": c.start_date = parsed_date
+                        if date_field == "start_date": c.start_date = parsed_date
                         else: c.expiry_date = parsed_date
                     except:
                         logger.warning(f"Formato de fecha inválido para {date_field}: {val}")
