@@ -8,7 +8,7 @@ import { ChatMessage } from '../types';
 import { useChat } from '../ChatContext';
 
 const suggestedPrompts = [
-  { title: "Resumen de contratos", description: "En resumen, ¿Cuántos contratos tengo y quiénes son los arrendatarios?" },
+  { title: "Resumen de contratos", description: "¿Cuántos contratos tengo y quiénes son los arrendatarios y cual es el monto de arrendamiento?" },
   { title: "Vencimientos próximos", description: "Identifica contratos que tienen fecha de vencimiento para dentro de los próximos 30 días." },
   { title: "Análisis de rentas", description: "¿Cuál es el monto total de renta mensual en todos mis contratos en MXN?" },
 ];
