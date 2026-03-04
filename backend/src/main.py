@@ -4,6 +4,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 import httpx
 import uuid
+import io
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 from sqlalchemy import func
@@ -45,6 +46,27 @@ app.add_middleware(
 s3 = S3Manager()
 ML_SERVICE_URL = os.getenv("ML_SERVICE_URL", "http://ml-service:8000")
 INTERNAL_TOKEN = os.getenv("INTERNAL_API_KEY")
+
+@app.get("/artifacts/{path:path}")
+async def proxy_artifacts(path: str):
+    """
+    Proxy para servir archivos directamente desde MinIO.
+    Resuelve el error 404 cuando MINIO_EXTERNAL_URL apunta al backend.
+    """
+    try:
+        # Descargamos el stream desde MinIO interno
+        file_bytes = s3.download_file(path)
+        return StreamingResponse(
+            io.BytesIO(file_bytes),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": "inline",
+                "Cache-Control": "max-age=3600"
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error en proxy de artefactos: {e}")
+        raise HTTPException(status_code=404, detail="Archivo no encontrado en el storage")
 
 Base.metadata.create_all(bind=engine)
 
@@ -99,6 +121,12 @@ class MessageResponse(BaseModel):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+class UserCreateAdmin(BaseModel):
+    email: EmailStr
+    password: str
+    is_active: bool = True
+    is_admin: bool = False
 
 class Token(BaseModel):
     access_token: str
@@ -382,10 +410,16 @@ async def list_users(db: Session = Depends(get_db), current: User = Depends(get_
     return db.query(User).all()
 
 @app.post("/admin/users", response_model=UserResponse)
-async def create_user_admin(data: UserLogin, db: Session = Depends(get_db), current: User = Depends(get_current_admin_user)):
+async def create_user_admin(data: UserCreateAdmin, db: Session = Depends(get_db), current: User = Depends(get_current_admin_user)):
     db_user = db.query(User).filter(User.email == data.email).first()
     if db_user: raise HTTPException(400, "Email ya registrado")
-    new_user = User(id=str(uuid.uuid4()), email=data.email, hashed_password=get_password_hash(data.password))
+    new_user = User(
+        id=str(uuid.uuid4()), 
+        email=data.email, 
+        hashed_password=get_password_hash(data.password),
+        is_active=data.is_active,
+        is_admin=data.is_admin
+    )
     db.add(new_user); db.commit(); db.refresh(new_user)
     return new_user
 

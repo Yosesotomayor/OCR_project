@@ -42,10 +42,9 @@ class S3Manager:
 
     def generate_presigned_url(self, object_name: str, expires_in: int = 3600) -> Optional[str]:
         """
-        Genera una URL firmada utilizando el endpoint externo.
+        Genera una URL firmada utilizando el endpoint externo para el navegador.
         """
         try:
-            # Cliente de firma 'externo' para que la URL sea válida desde el browser
             signing_client = boto3.client(
                 "s3",
                 endpoint_url=self.external_endpoint,
@@ -65,10 +64,42 @@ class S3Manager:
                 },
                 ExpiresIn=expires_in
             )
+            
             return url
         except Exception as e:
-            print(f"Error generando presigned URL: {e}")
-            return None
+            print(f"Error generando presigned URL con client externo: {e}. Intentando fallback...")
+            try:
+                url = self.s3_client.generate_presigned_url(
+                    'get_object',
+                    Params={
+                        'Bucket': self.bucket_name, 
+                        'Key': object_name,
+                        'ResponseContentType': 'application/pdf',
+                        'ResponseContentDisposition': 'inline'
+                    },
+                    ExpiresIn=expires_in
+                )
+                if "minio:9000" in url and "localhost" in self.external_endpoint:
+                    url = url.replace("minio:9000", "localhost:9000")
+                elif self.external_endpoint not in url:
+                    from urllib.parse import urlparse, urlunparse
+                    parsed_url = urlparse(url)
+                    parsed_ext = urlparse(self.external_endpoint)
+                    new_url = parsed_url._replace(netloc=parsed_ext.netloc, scheme=parsed_ext.scheme)
+                    url = urlunparse(new_url)
+                return url
+            except Exception as e2:
+                print(f"Error fatal generando presigned URL: {e2}")
+                return None
+
+    def download_file(self, object_name: str) -> bytes:
+        """Descarga un archivo de MinIO y devuelve su contenido en bytes."""
+        try:
+            response = self.s3_client.get_object(Bucket=self.bucket_name, Key=object_name)
+            return response['Body'].read()
+        except Exception as e:
+            print(f"Error descargando de MinIO: {e}")
+            raise
 
     def delete_file(self, object_name: str) -> bool:
         try:

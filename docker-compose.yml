@@ -29,6 +29,7 @@ services:
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
       - MINIO_BUCKET=artifacts
+      - MINIO_EXTERNAL_URL=${MINIO_EXTERNAL_URL:-http://localhost:9000}
       - INTERNAL_API_KEY=${INTERNAL_API_KEY}
     networks:
       - frontend-net
@@ -131,6 +132,7 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
     volumes:
       - minio_data:/data
     networks:
