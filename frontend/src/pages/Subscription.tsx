@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { CheckCircle, Loader2, Users, Shield, CreditCard } from 'lucide-react';
+import { cn } from '../utils';
 
 const API_URL = import.meta.env.VITE_API_URL;
 

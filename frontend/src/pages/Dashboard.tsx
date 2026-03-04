@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { cn } from '../lib/utils';
+import { cn } from '../utils';
 import { ILeaseContract } from '../types';
 import { 
   TrendingUp, ShieldCheck, Calendar, Loader2, Download, 

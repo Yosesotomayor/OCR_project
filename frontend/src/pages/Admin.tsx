@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { cn } from '../lib/utils';
+import { cn } from '../utils';
 import { User, Shield, MoreVertical, Search, Key, ShieldAlert, Loader2, Plus, Edit, Trash2, X, Check } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth'; // Import useAuth to get the token
 

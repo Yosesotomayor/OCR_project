@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Terminal as TerminalIcon, ShieldCheck, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
-import { cn } from '../lib/utils';
+import { cn } from '../utils';
 
 const API_URL = import.meta.env.VITE_API_URL;
 

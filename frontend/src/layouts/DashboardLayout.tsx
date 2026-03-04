@@ -9,7 +9,7 @@ import {
   CreditCard,
   Terminal
 } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn } from '../utils';
 import { useAuth } from '../hooks/useAuth';
 
 const baseNavItems = [ // Renamed to baseNavItems

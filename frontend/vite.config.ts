@@ -1,42 +1,41 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import { visualizer } from 'rollup-plugin-visualizer' // Instala esto: npm view rollup-plugin-visualizer
+import { visualizer } from 'rollup-plugin-visualizer'
 
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    // Esto te dirá exactamente qué librería está "engordando" tu bundle
     visualizer({
-      open: true,
-      filename: 'bundle-analysis.html',
+      // open: true,
+      filename: 'dist/stats.html',
       gzipSize: true,
+      brotliSize: true,
     }),
   ],
-
-  optimizeDeps: {
-    include: ['react-window'],
-  },
-
   build: {
-    // 1. Divide y vencerás: Separamos las librerías pesadas del código de tu app
+    target: 'esnext',
+    minify: 'esbuild', 
+    terserOptions: {
+      compress: {
+        drop_console: true, 
+        drop_debugger: true,
+      },
+    },
     rollupOptions: {
       output: {
         manualChunks(id) {
           if (id.includes('node_modules')) {
-            // Agrupamos todo lo de node_modules en un chunk llamado 'vendor'
-            return 'vendor';
+            if (id.includes('recharts')) return 'vendor-charts';
+            if (id.includes('framer-motion')) return 'vendor-animation';
+            if (id.includes('lucide-react')) return 'vendor-icons';
+            if (id.includes('react-dom') || id.includes('react-router')) return 'vendor-core';
+            return 'vendor-others';
           }
         },
       },
     },
-    // 2. Limpieza de logs en producción
-    minify: 'esbuild',
-    chunkSizeWarningLimit: 600,
-    commonjsOptions: {
-      include: [/react-window/, /node_modules/],
-      transformMixedEsModules: true,
-    },
+    chunkSizeWarningLimit: 800,
   },
 })

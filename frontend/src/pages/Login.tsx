@@ -2,7 +2,7 @@ import { useState } from 'react';
 import AuthLayout from '../layouts/AuthLayout';
 import { Zap, ShieldCheck, AlertCircle, Eye, EyeOff } from 'lucide-react'; // Import Eye and EyeOff
 import { useNavigate } from 'react-router-dom';
-import { cn } from '../lib/utils';
+import { cn } from '../utils';
 import { useAuth } from '../hooks/useAuth'; // Import useAuth
 import NeuralNetworkBackground from '../components/NeuralNetworkBackground'; // Import NeuralNetworkBackground
 

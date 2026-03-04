@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, memo } from 'react';
-import { cn } from '../lib/utils';
+import { cn } from '../utils';
 import { 
   FileUp, FileText, CheckCircle, Search, 
   MapPin, Zap, AlertTriangle, X, Trash2, Eye, Download, ShieldCheck, Loader2, ArrowUpDown

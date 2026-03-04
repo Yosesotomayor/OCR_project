@@ -3,7 +3,7 @@ import { Send, User, Zap, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { cn } from '../lib/utils';
+import { cn } from '../utils';
 import { ChatMessage } from '../types';
 import { useChat } from '../ChatContext';
 

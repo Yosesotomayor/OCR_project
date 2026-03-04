@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { cn } from '../lib/utils';
+import { cn } from '../utils';
 import { MessageSquare, Plus, Trash2, Zap, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import ChatContainer from '../components/ChatContainer';
 import { useAuth } from '../hooks/useAuth';
