@@ -189,34 +189,36 @@ const Subscription: React.FC = () => {
               <h2 className="text-2xl font-bold tracking-tight">Protocolo de Suscripción Personal</h2>
             </div>
 
-            {/* Selector de Ciclo */}
-            <div className="flex justify-center mb-16">
-              <div className="relative inline-flex items-center p-1.5 rounded-2xl bg-[#111111] border border-[#1f1f1f] shadow-inner">
-                <button
-                  className={`px-10 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-500 ${
-                    billingCycle === 'monthly' 
-                      ? 'bg-accent-electric text-black shadow-[0_0_20px_rgba(168,85,247,0.4)]' 
-                      : 'text-gray-500 hover:text-gray-300'
-                  }`}
-                  onClick={() => setBillingCycle('monthly')}
-                >
-                  Mensual
-                </button>
-                <button
-                  className={`px-10 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-500 ${
-                    billingCycle === 'annually' 
-                      ? 'bg-accent-electric text-black shadow-[0_0_20px_rgba(168,85,247,0.4)]' 
-                      : 'text-gray-500 hover:text-gray-300'
-                  }`}
-                  onClick={() => setBillingCycle('annually')}
-                >
-                  Anual (-17%)
-                </button>
+            {/* Selector de Ciclo - SOLO ADMINS PUEDEN CAMBIAR */}
+            {isAdmin && (
+              <div className="flex justify-center mb-16">
+                <div className="relative inline-flex items-center p-1.5 rounded-2xl bg-[#111111] border border-[#1f1f1f] shadow-inner">
+                  <button
+                    className={`px-10 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-500 ${
+                      billingCycle === 'monthly' 
+                        ? 'bg-accent-electric text-black shadow-[0_0_20px_rgba(168,85,247,0.4)]' 
+                        : 'text-gray-500 hover:text-gray-300'
+                    }`}
+                    onClick={() => setBillingCycle('monthly')}
+                  >
+                    Mensual
+                  </button>
+                  <button
+                    className={`px-10 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-500 ${
+                      billingCycle === 'annually' 
+                        ? 'bg-accent-electric text-black shadow-[0_0_20px_rgba(168,85,247,0.4)]' 
+                        : 'text-gray-500 hover:text-gray-300'
+                    }`}
+                    onClick={() => setBillingCycle('annually')}
+                  >
+                    Anual (-17%)
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Grid de Tarjetas */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className={cn("grid grid-cols-1 lg:grid-cols-3 gap-8", !isAdmin && "mt-20")}>
               {pricingPlans.map((plan) => (
                 <div
                   key={plan.name}
@@ -260,23 +262,32 @@ const Subscription: React.FC = () => {
                     ))}
                   </ul>
 
-                  <button
-                    onClick={() => handlePersonalSubscription(plan.name)}
-                    disabled={!!loading || user?.subscription_plan === plan.name}
-                    className={`w-full py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 active:scale-[0.98] ${
-                        user?.subscription_plan === plan.name
-                        ? 'bg-[#111111] text-gray-700 border border-[#1f1f1f] cursor-default'
-                        : 'bg-accent-electric text-black shadow-[0_10px_30px_rgba(168,85,247,0.3)] hover:shadow-[0_15px_40px_rgba(168,85,247,0.5)]'
-                    }`}
-                  >
-                    {loading === plan.name ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : user?.subscription_plan === plan.name ? (
-                      'Protocolo Activo'
-                    ) : (
-                      `Activar ${plan.name}`
-                    )}
-                  </button>
+                  {/* Botón de acción solo para Admins o si ya es el plan activo */}
+                  {isAdmin ? (
+                    <button
+                      onClick={() => handlePersonalSubscription(plan.name)}
+                      disabled={!!loading || user?.subscription_plan === plan.name}
+                      className={`w-full py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 active:scale-[0.98] ${
+                          user?.subscription_plan === plan.name
+                          ? 'bg-[#111111] text-gray-700 border border-[#1f1f1f] cursor-default'
+                          : 'bg-accent-electric text-black shadow-[0_10px_30px_rgba(168,85,247,0.3)] hover:shadow-[0_15px_40px_rgba(168,85,247,0.5)]'
+                      }`}
+                    >
+                      {loading === plan.name ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : user?.subscription_plan === plan.name ? (
+                        'Protocolo Activo'
+                      ) : (
+                        `Activar ${plan.name}`
+                      )}
+                    </button>
+                  ) : (
+                    user?.subscription_plan === plan.name && (
+                      <div className="w-full py-5 rounded-2xl bg-[#111111] text-accent-electric border border-accent-electric/20 font-black text-[10px] uppercase tracking-[0.3em] flex items-center justify-center gap-2">
+                        <Shield size={14} /> Plan en Operación
+                      </div>
+                    )
+                  )}
                 </div>
               ))}
             </div>

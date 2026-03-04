@@ -46,6 +46,7 @@ app.add_middleware(
 s3 = S3Manager()
 ML_SERVICE_URL = os.getenv("ML_SERVICE_URL", "http://ml-service:8000")
 INTERNAL_TOKEN = os.getenv("INTERNAL_API_KEY")
+DEFAULT_ADMIN_EMAIL = os.getenv("DEFAULT_ADMIN_EMAIL", "admin@vertiche.mx")
 
 @app.get("/artifacts/{path:path}")
 async def proxy_artifacts(path: str):
@@ -166,8 +167,16 @@ class ContractSchema(BaseModel):
 async def register_user(user: UserLogin, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.email == user.email).first()
     if db_user: raise HTTPException(400, "Email ya registrado")
-    new_user = User(id=str(uuid.uuid4()), email=user.email, hashed_password=get_password_hash(user.password))
-    if db.query(User).count() == 0: new_user.is_admin = True
+    
+    # El primer usuario siempre es admin y activo, los demás requieren aprobación
+    is_first = db.query(User).count() == 0
+    new_user = User(
+        id=str(uuid.uuid4()), 
+        email=user.email, 
+        hashed_password=get_password_hash(user.password),
+        is_active=True if is_first else False,
+        is_admin=is_first
+    )
     db.add(new_user); db.commit(); db.refresh(new_user)
     return new_user
 
@@ -176,6 +185,13 @@ async def login(data: UserLogin, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == data.email).first()
     if not user or not verify_password(data.password, user.hashed_password):
         raise HTTPException(401, "Credenciales incorrectas")
+    
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Tu cuenta está pendiente de aprobación por un administrador."
+        )
+        
     return {"access_token": create_access_token(data={"sub": user.email}), "token_type": "bearer"}
 
 @app.get("/users/me", response_model=UserResponse)
@@ -468,6 +484,16 @@ async def update_my_subscription(data: dict, db: Session = Depends(get_db), curr
 @app.delete("/admin/users/{user_id}", status_code=204)
 async def delete_user(user_id: str, db: Session = Depends(get_db), current: User = Depends(get_current_admin_user)):
     user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    
+    # PROTECCIÓN CRÍTICA: No permitir borrar el admin por defecto
+    if user.email == DEFAULT_ADMIN_EMAIL:
+        raise HTTPException(
+            status_code=403, 
+            detail=f"Operación denegada: El administrador del sistema ({DEFAULT_ADMIN_EMAIL}) no puede ser eliminado por seguridad."
+        )
+        
     if user: db.delete(user); db.commit()
 
 @app.patch("/contracts/{contract_id}", dependencies=[Depends(validate_internal_token)])

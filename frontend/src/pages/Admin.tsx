@@ -336,9 +336,10 @@ export default function Admin() {
                   <td className="p-6">
                     <div className={cn(
                       "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest w-fit border shadow-sm",
-                      u.is_active ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-red-500/10 text-red-500 border-red-500/20"
+                      u.is_active ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-orange-500/10 text-orange-500 border-orange-500/20 animate-pulse"
                     )}>
-                      {u.is_active ? 'Activo' : 'Inactivo'}
+                      {u.is_active ? <Check size={12} /> : <Shield size={12} />}
+                      {u.is_active ? 'Activo' : 'Pendiente de Aprobación'}
                     </div>
                   </td>
                   <td className="p-6 text-right">
