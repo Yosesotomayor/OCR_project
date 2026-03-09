@@ -13,8 +13,7 @@ ocr = PaddleOCR(
     use_angle_cls=True, 
     lang="es", 
     det_db_unclip_ratio=2.0,
-    rec_batch_num=16,
-    show_log=False
+    rec_batch_num=16
 )
 
 def extract_text_from_pdf(file_content: bytes) -> str:
