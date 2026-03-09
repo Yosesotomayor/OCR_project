@@ -27,12 +27,21 @@ INTERNAL_TOKEN = os.getenv("INTERNAL_API_KEY", "super-secret-key-123")
 BACKEND_URL = os.getenv("BACKEND_INTERNAL_URL", "http://backend:8000")
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 
-llm = OllamaLLM(
+# Modelos especializados según GEMINI.md
+extractor_llm = OllamaLLM(
     model="llama3.2:3b", 
     base_url=OLLAMA_URL, 
-    num_ctx=4096, 
+    num_ctx=16384,  # Aumentado para 5+ páginas
     temperature=0.0,
-    timeout=60.0
+    timeout=120.0
+)
+
+analyst_llm = OllamaLLM(
+    model="llama3.1:8b", 
+    base_url=OLLAMA_URL, 
+    num_ctx=16384,
+    temperature=0.1,
+    timeout=120.0
 )
 
 class IngestRequest(BaseModel):
@@ -71,7 +80,8 @@ async def run_heavy_processing(contract_id: str, s3_key: str):
 
         await safe_patch(contract_id, {"status": "processing", "progress": 80})
         
-        input_data = text[:12000]
+        # 30,000 chars cubren ~5-7 páginas holgadamente
+        input_data = text[:30000]
         prompt = (
             f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n"
             f"Eres un experto en auditoría legal. Extrae datos financieros y fechas de este contrato.\n"
@@ -96,8 +106,7 @@ async def run_heavy_processing(contract_id: str, s3_key: str):
             f"{{"
         )
         
-        # Forzamos que la respuesta empiece con '{' para guiar al modelo
-        resp_raw = await llm.ainvoke(prompt)
+        resp_raw = await extractor_llm.ainvoke(prompt)
         resp = "{" + resp_raw if not resp_raw.strip().startswith("{") else resp_raw
         
         final_data = {}
@@ -148,7 +157,7 @@ async def query_stream(req: ChatRequest):
     )
     
     async def generate():
-        async for chunk in llm.astream(full_prompt): yield chunk
+        async for chunk in analyst_llm.astream(full_prompt): yield chunk
 
     return StreamingResponse(generate(), media_type="text/plain")
 
