@@ -12,10 +12,6 @@ logging.basicConfig(
 logger = logging.getLogger("ModelDownloader")
 
 def download_models():
-    """
-    Inicialización ultra-robusta para pre-descarga de modelos.
-    Si fallan los argumentos nombrados, intenta con el mínimo posible.
-    """
     paddle_home = os.getenv('PADDLE_HOME', '/app/.paddleocr')
     logger.info(f"PADDLE_HOME: {paddle_home}")
     

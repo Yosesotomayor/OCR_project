@@ -139,7 +139,7 @@ async def query_stream(req: ChatRequest):
     full_prompt = (
         f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n"
         f"Eres LeaseLens AI, socio de inteligencia inmobiliaria. Responde de forma formal y ejecutiva.\n"
-        f"Usa el PORTAFOLIO y el CONTEXTO DOC proporcionados. No alucines datos.<|eot_id|>\n"
+        f"Usa el PORTAFOLIO y el CONTEXTO DOC proporcionados. No alucines datos. Si no sabes un dato estrictamente di que no sabes!<|eot_id|>\n"
         f"<|start_header_id|>user<|end_header_id|>\n\n"
         f"### PORTAFOLIO: {req.portfolio_summary}\n"
         f"### CONTEXTO DOC: {context}\n"
