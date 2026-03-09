@@ -14,7 +14,6 @@ from .parsers.pdf_parser import extract_text_from_pdf
 from langchain_ollama import OllamaLLM
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-# Configuración de logs
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -28,7 +27,6 @@ INTERNAL_TOKEN = os.getenv("INTERNAL_API_KEY", "super-secret-key-123")
 BACKEND_URL = os.getenv("BACKEND_INTERNAL_URL", "http://backend:8000")
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 
-# Motor IA optimizado para JSON
 llm = OllamaLLM(
     model="llama3.2:3b", 
     base_url=OLLAMA_URL, 
@@ -63,20 +61,16 @@ async def safe_patch(contract_id: str, payload: dict):
 
 async def run_heavy_processing(contract_id: str, s3_key: str):
     try:
-        # 1. OCR (20%)
         await safe_patch(contract_id, {"status": "processing", "progress": 20})
         file_bytes = await asyncio.to_thread(s3.download_file, s3_key)
         text = await asyncio.to_thread(extract_text_from_pdf, file_bytes)
         
-        # 2. Vectorización (40%)
         await safe_patch(contract_id, {"status": "processing", "progress": 40})
         chunks = splitter.split_text(text)
         await asyncio.to_thread(vector_db.add_documents, chunks, [{"doc_id": contract_id} for _ in chunks], [f"{contract_id}_{i}" for i in range(len(chunks))])
 
-        # 3. Extracción (80%) - SCHEMA-FIRST EXTRACTION
         await safe_patch(contract_id, {"status": "processing", "progress": 80})
         
-        # 12k chars para dar más contexto a las fechas de cierre
         input_data = text[:12000]
         prompt = (
             f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n"
@@ -116,7 +110,6 @@ async def run_heavy_processing(contract_id: str, s3_key: str):
         except:
             logger.error(f"Fallo parsing JSON para {contract_id}")
 
-        # 4. Finalizado (100%)
         await safe_patch(contract_id, {
             "status": "completed", 
             "progress": 100, 

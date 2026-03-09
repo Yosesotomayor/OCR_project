@@ -9,7 +9,6 @@ logger = logging.getLogger(__name__)
 
 class VectorManager:
     def __init__(self):
-        # Usamos la misma DB que el backend, pero con la extension vector
         self.connection_string = os.getenv("DATABASE_URL")
         self.collection_name = "contract_vectors"
         
@@ -33,21 +32,20 @@ class VectorManager:
                 for t, m, i in zip(texts, metadatas, ids)
             ]
             self.vector_store.add_documents(docs, ids=ids)
-            logger.info(f"✅ {len(texts)} chunks indexados en PGVector.")
+            logger.info(f"{len(texts)} chunks indexados en PGVector.")
         except Exception as e:
-            logger.error(f"❌ Error indexando vectores: {e}")
+            logger.error(f"Error indexando vectores: {e}")
 
     def search(self, query: str, n_results: int = 5):
         """Busca documentos similares"""
         try:
             results = self.vector_store.similarity_search(query, k=n_results)
-            # Adaptamos el formato para que sea compatible con el resto del codigo (simulando Chroma)
             return {
                 'documents': [[doc.page_content for doc in results]],
                 'metadatas': [[doc.metadata for doc in results]]
             }
         except Exception as e:
-            logger.error(f"❌ Error buscando vectores: {e}")
+            logger.error(f"Error buscando vectores: {e}")
             return {'documents': [[]], 'metadatas': [[]]}
 
     def delete_documents(self, doc_id: str):

@@ -3,7 +3,6 @@ import sys
 import logging
 from paddleocr import PaddleOCR
 
-# Silenciar warnings de conexiones y optimizar
 os.environ['PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK'] = 'True'
 
 logging.basicConfig(
@@ -24,15 +23,12 @@ def download_models():
         os.makedirs(paddle_home, exist_ok=True)
         
         logger.info("Intentando inicialización minimalista (lang='es')...")
-        # Intentamos solo con 'lang', que es el argumento más esencial.
-        # PaddleOCR descargará los modelos de detección, reconocimiento y clasificación por defecto.
         ocr = PaddleOCR(lang='es')
         
         logger.info("Modelos descargados exitosamente.")
         
     except Exception as e:
         logger.error(f"Error crítico en download_models: {e}")
-        # Si incluso esto falla, intentamos sin ningún argumento
         try:
             logger.info("Reintentando inicialización sin argumentos...")
             ocr = PaddleOCR()
