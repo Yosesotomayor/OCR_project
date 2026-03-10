@@ -16,6 +16,8 @@ class Contract(Base):
     expiry_date = Column(Date, nullable=True)
     property_name = Column(String, nullable=True)
     property_zone = Column(String, nullable=True)
+    total_pages = Column(Integer, nullable=True) # NUEVO: Total de páginas
+    clause_count = Column(Integer, nullable=True) # NUEVO: Total de cláusulas
     s3_key = Column(String, nullable=False)
     error_detail = Column(Text, nullable=True)
 

@@ -247,7 +247,7 @@ async def chat_stream(req: ChatRequest, db: Session = Depends(get_db), current: 
         contracts = db.query(Contract).all()
         summary = f"PORTAFOLIO: {len(contracts)} contratos.\n"
         for c in contracts:
-            summary += f"- {c.filename}: {c.tenant_name}, Rent: {c.monthly_rent}\n"
+            summary += f"- {c.filename}: {c.tenant_name}, Rent: {c.monthly_rent}, Pages: {c.total_pages or 'S/I'}, Clauses: {c.clause_count or 'S/I'} (ID: {c.id})\n"
         req.portfolio_summary = summary
 
         async def stream_generator():
@@ -355,12 +355,32 @@ async def upload(file: UploadFile = File(...), db: Session = Depends(get_db), cu
     cid = str(uuid.uuid4())
     content = await file.read()
     key = f"contracts/{cid}/{file.filename}"
-    s3.upload_file(content, key)
-    contract = Contract(id=cid, filename=file.filename, s3_key=key, status="processing", progress=10)
-    db.add(contract); db.commit()
-    async with httpx.AsyncClient() as client:
-        await client.post(f"{ML_SERVICE_URL}/process", json={"contract_id": cid, "s3_key": key, "filename": file.filename})
-    return {"contract_id": cid}
+    
+    try:
+        s3.upload_file(content, key)
+        contract = Contract(id=cid, filename=file.filename, s3_key=key, status="processing", progress=10)
+        db.add(contract)
+        db.commit()
+        
+        # Notificar al ML Service con tolerancia a fallos
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            try:
+                await client.post(
+                    f"{ML_SERVICE_URL}/process", 
+                    json={"contract_id": cid, "s3_key": key, "filename": file.filename},
+                    headers={"X-Internal-Token": INTERNAL_TOKEN}
+                )
+            except Exception as e:
+                logger.error(f"ML Service inalcanzable: {e}")
+                # Marcamos como error de procesamiento pero no rompemos la petición 200
+                contract.status = "error"
+                contract.error_detail = "Motor de IA temporalmente fuera de línea. Reintente en un momento."
+                db.commit()
+                
+        return {"contract_id": cid}
+    except Exception as e:
+        logger.error(f"Error crítico en upload: {e}")
+        raise HTTPException(status_code=500, detail="Error interno al procesar el archivo")
 
 @app.get("/admin/logs")
 async def get_system_logs(current: User = Depends(get_current_admin_user)):
@@ -519,17 +539,26 @@ async def update_ml(contract_id: str, update: ContractUpdate, db: Session = Depe
             c.currency = str(data.get("currency")) if data.get("currency") else "MXN"
             c.property_name = str(data.get("property_name")) if data.get("property_name") else None
             c.property_zone = str(data.get("property_zone")) if data.get("property_zone") else None
+            c.total_pages = data.get("total_pages") if data.get("total_pages") else None
+            c.clause_count = data.get("clause_count") if data.get("clause_count") else None
             
-            # Parseo robusto de fechas (YYYY-MM-DD)
+            # Parseo robusto de fechas (YYYY-MM-DD con tolerancia a formatos latinos)
             for date_field in ["start_date", "expiry_date"]:
                 val = data.get(date_field)
-                if val and isinstance(val, str) and val != "string": # Evitar placeholders
-                    try:
-                        parsed_date = datetime.strptime(val, "%Y-%m-%d").date()
+                if val and isinstance(val, str) and val != "string":
+                    parsed_date = None
+                    # Intentar múltiples formatos comunes de OCR/LLM
+                    for fmt in ["%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d"]:
+                        try:
+                            parsed_date = datetime.strptime(val.strip(), fmt).date()
+                            break
+                        except: continue
+                    
+                    if parsed_date:
                         if date_field == "start_date": c.start_date = parsed_date
                         else: c.expiry_date = parsed_date
-                    except:
-                        logger.warning(f"Formato de fecha inválido para {date_field}: {val}")
+                    else:
+                        logger.warning(f"No se pudo normalizar fecha: {val}")
         except Exception as e:
             logger.error(f"Error procesando extracted_data: {e}")
     

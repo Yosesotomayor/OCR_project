@@ -226,7 +226,7 @@ export default function Documents() {
                   )}
                 </div>
                 <div className="flex-1 bg-[#0a0a0a] p-10 space-y-8 overflow-y-auto">
-                  <h4 className="text-[10px] font-black uppercase text-accent-electric flex items-center gap-2"><ShieldCheck size={14}/> Análisis Mifel AI</h4>
+                  <h4 className="text-[10px] font-black uppercase text-accent-electric flex items-center gap-2"><ShieldCheck size={14}/> Análisis LeaseLens AI</h4>
                   <div className="space-y-4">
                     <div className="p-4 bg-white/2 rounded-2xl">Arrendatario: <b className="text-white">{selectedContract.tenant_name || '---'}</b></div>
                     <div className="p-4 bg-white/2 rounded-2xl">Renta: <b className="text-accent-electric font-mono">{selectedContract.monthly_rent ? new Intl.NumberFormat('es-MX', {style:'currency', currency:'MXN'}).format(selectedContract.monthly_rent) : '---'}</b></div>

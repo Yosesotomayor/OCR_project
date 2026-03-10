@@ -36,10 +36,10 @@ class VectorManager:
         except Exception as e:
             logger.error(f"Error indexando vectores: {e}")
 
-    def search(self, query: str, n_results: int = 5):
-        """Busca documentos similares"""
+    def search(self, query: str, n_results: int = 5, filter: Dict = None):
+        """Busca documentos similares con soporte opcional para filtros"""
         try:
-            results = self.vector_store.similarity_search(query, k=n_results)
+            results = self.vector_store.similarity_search(query, k=n_results, filter=filter)
             return {
                 'documents': [[doc.page_content for doc in results]],
                 'metadatas': [[doc.metadata for doc in results]]
