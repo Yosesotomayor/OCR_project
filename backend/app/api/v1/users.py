@@ -36,7 +36,7 @@ async def update_user(
     auth_service: AuthService = Depends(get_auth_service),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.id == user_id:
+    if str(current_user.id) == user_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="You cannot update yourself"
@@ -52,7 +52,7 @@ async def delete_user(
     auth_service: AuthService = Depends(get_auth_service),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.id == user_id:
+    if str(current_user.id) == user_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="You cannot delete yourself"
