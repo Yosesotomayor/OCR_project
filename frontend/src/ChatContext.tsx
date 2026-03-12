@@ -44,7 +44,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setActiveChatId(chatId);
     setMessages([]);
     try {
-      const { data } = await getMessages({ path: { chat_id: chatId } });
+      const { data, error } = await getMessages({ path: { chat_id: chatId } });
+      if (error) {
+        console.error("Chat not found, starting new chat");
+        startNewChat();
+        return;
+      }
       if (data) {
         setMessages(data.map((m: any) => ({
           id: m.id || Math.random().toString(),
@@ -53,8 +58,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           timestamp: new Date(m.created_at).toLocaleTimeString()
         })));
       }
-    } catch (err) { console.error(err); }
-  }, [token]);
+    } catch (err) { 
+      console.error(err);
+      startNewChat();
+    }
+  }, [token, startNewChat]);
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || !token || isThinking) return;
@@ -114,6 +122,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
   
       console.log("Response:", response);
+      
+      if (response.status === 404) {
+        setActiveChatId(null);
+        localStorage.removeItem('last_active_chat_id');
+        throw new Error("La sesión ya no existe. Por favor, intenta de nuevo.");
+      }
+
       if (!response.ok) throw new Error("GPU Timeout");
       if (!response.body) throw new Error("No stream");
   

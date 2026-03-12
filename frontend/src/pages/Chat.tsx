@@ -52,13 +52,15 @@ export default function Chat() {
 
   useEffect(() => {
     const savedId = localStorage.getItem('last_active_chat_id');
-    if (savedId && sessions.length > 0 && messages.length === 0 && !activeChatId) {
+    if (savedId && sessions.length > 0 && messages.length === 0) {
       const sessionExists = sessions.some(s => s.id === savedId);
       if (sessionExists) {
-        loadChat(savedId);
+        if (!activeChatId) loadChat(savedId);
+      } else {
+        startNewChat();
       }
     }
-  }, [sessions, activeChatId, messages.length, loadChat]);
+  }, [sessions, activeChatId, messages.length, loadChat, startNewChat]);
 
   return (
     <div className="flex h-full bg-[#050505] text-white font-sans overflow-hidden relative">
