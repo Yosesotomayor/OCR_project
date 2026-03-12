@@ -1,17 +1,126 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, User, Zap, Loader2 } from 'lucide-react';
+import { Send, User, Zap, Loader2, ExternalLink, X, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '../utils';
-import { ChatMessage } from '../types';
+import { ChatMessage, Source } from '../types';
 import { useChat } from '../ChatContext';
+import { getLeaseUrl } from '../client/sdk.gen';
 
 const suggestedPrompts = [
-  { title: "Resumen de contratos", description: "¿Cuántos contratos tengo y quiénes son los arrendatarios y cual es el monto de arrendamiento?" },
+  { title: "Resumen de contratos", description: "¿Cuáles contratos tengo en Monterrey, quiénes son los arrendatarios y cual es el monto de arrendamiento?" },
   { title: "Vencimientos próximos", description: "Identifica contratos que tienen fecha de vencimiento para dentro de los próximos 30 días." },
-  { title: "Análisis de rentas", description: "¿Cuál es el monto total de renta mensual en todos mis contratos en MXN?" },
+  { title: "Análisis de rentas", description: "¿Cuáles contratos tienen renta arriba de 100,000 pesos?" },
 ];
+
+const SourceChip = ({ source }: { source: Source }) => {
+  const { leases } = useChat();
+  const [isHovered, setIsHovered] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+
+  const lease = leases.find(l => l.filename === source.lease_filename);
+  
+  const handleOpenPreview = async () => {
+    if (!lease?.id) return;
+    try {
+      const { data } = await getLeaseUrl({ path: { lease_id: lease.id } });
+      if (data) {
+        setPdfUrl(data as string);
+        setIsPreviewOpen(true);
+      }
+    } catch (err) {
+      console.error("Error fetching PDF URL:", err);
+    }
+  };
+
+  return (
+    <>
+      <div className="relative inline-block group">
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+          onClick={handleOpenPreview}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 hover:border-accent-electric/50 transition-all text-[10px] text-gray-400 hover:text-white group"
+        >
+          <FileText size={10} className="text-accent-electric" />
+          <span className="truncate max-w-[120px]">{source.filename}</span>
+        </motion.button>
+
+        <AnimatePresence>
+          {isHovered && (
+            <motion.div
+              initial={{ opacity: 0, y: 5, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 5, scale: 0.95 }}
+              className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 w-64 p-4 bg-[#111] border border-white/10 rounded-2xl shadow-2xl z-50 pointer-events-none"
+            >
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+                  <FileText size={12} className="text-accent-electric" />
+                  <span className="text-[10px] font-bold text-gray-300 truncate">{source.filename}</span>
+                </div>
+                <p className="text-[10px] leading-relaxed text-gray-500 italic line-clamp-4">
+                  "{source.text}"
+                </p>
+                <div className="flex items-center gap-1 text-[8px] text-accent-electric font-black uppercase tracking-tighter pt-1 opacity-70">
+                  <ExternalLink size={8} /> Click para vista previa
+                </div>
+              </div>
+              <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#111] border-r border-b border-white/10 rotate-45" />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <AnimatePresence>
+        {isPreviewOpen && pdfUrl && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-10">
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setIsPreviewOpen(false)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full h-full max-w-6xl bg-[#0a0a0a] border border-white/10 rounded-3xl overflow-hidden shadow-2xl flex flex-col"
+            >
+              <div className="p-4 flex items-center justify-between border-b border-white/5 bg-white/2">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-accent-electric/10 flex items-center justify-center">
+                    <FileText size={16} className="text-accent-electric" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-gray-200">{source.filename}</p>
+                    <p className="text-[10px] text-gray-500">Vista previa del documento</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsPreviewOpen(false)}
+                  className="p-2 hover:bg-white/10 rounded-xl transition-all"
+                >
+                  <X size={20} className="text-gray-400" />
+                </button>
+              </div>
+              <div className="flex-1 bg-white/2 p-4">
+                <iframe 
+                  src={pdfUrl} 
+                  className="w-full h-full rounded-2xl border border-white/5 shadow-inner"
+                  title="PDF Preview"
+                />
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+};
 
 interface ChatContainerProps {
   messages: ChatMessage[];
@@ -95,10 +204,20 @@ export default function ChatContainer({
                         </div>
                       </div>
                     ) : msg.role === 'assistant' ? (
-                      <div className="prose prose-sm max-w-none prose-custom prose-table:border prose-table:border-white/10 prose-th:bg-white/5 prose-th:p-2 prose-td:p-2 prose-td:border-t prose-td:border-white/5 prose-table:my-6 prose-headings:font-bold prose-headings:tracking-tight prose-a:underline prose-a:underline-offset-4 hover:prose-a:text-accent-electric/80 transition-all">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {msg.content}
-                        </ReactMarkdown>
+                      <div className="flex flex-col gap-4">
+                        <div className="prose prose-sm max-w-none prose-custom prose-table:border prose-table:border-white/10 prose-th:bg-white/5 prose-th:p-2 prose-td:p-2 prose-td:border-t prose-td:border-white/5 prose-table:my-6 prose-headings:font-bold prose-headings:tracking-tight prose-a:underline prose-a:underline-offset-4 hover:prose-a:text-accent-electric/80 transition-all">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {msg.content}
+                          </ReactMarkdown>
+                        </div>
+                        
+                        {msg.sources && msg.sources.length > 0 && (
+                          <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
+                            {msg.sources.map((source, idx) => (
+                              <SourceChip key={idx} source={source} />
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ) : (
                       msg.content

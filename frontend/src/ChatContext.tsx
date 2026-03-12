@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { ChatMessage } from './types';
+import { ChatMessage, Source } from './types';
 import { useAuth } from './hooks/useAuth';
-import { createChat, getMessages, sendMessage as sdkSendMessage } from './client/sdk.gen';
+import { createChat, getMessages, sendMessage as sdkSendMessage, listLeases } from './client/sdk.gen';
+import { type LeaseOut } from './client/types.gen';
 import { client } from './api/client';
 
 interface ChatContextType {
@@ -14,6 +15,7 @@ interface ChatContextType {
   sendMessage: (text: string) => Promise<void>;
   loadChat: (chatId: string) => Promise<void>;
   startNewChat: () => void;
+  leases: LeaseOut[];
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -23,7 +25,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isThinking, setIsThinking] = useState(false);
   const [thinkingStep, setThinkingStep] = useState('');
   const [activeChatId, setActiveChatId] = useState<string | null>(localStorage.getItem('last_active_chat_id'));
+  const [leases, setLeases] = useState<LeaseOut[]>([]);
   const { token } = useAuth();
+
+  useEffect(() => {
+    if (token) {
+      listLeases().then(({ data }) => {
+        if (data?.items) setLeases(data.items);
+      });
+    }
+  }, [token]);
 
   useEffect(() => {
     if (activeChatId) {
@@ -55,7 +66,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           id: m.id || Math.random().toString(),
           role: m.role,
           content: m.content,
-          timestamp: new Date(m.created_at).toLocaleTimeString()
+          timestamp: new Date(m.created_at).toLocaleTimeString(),
+          sources: m.metadata_?.['sources'] as Source[],
         })));
       }
     } catch (err) { 
@@ -182,7 +194,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
   
           if (eventType === "sources") {
-            console.log("Sources:", parsed);
+            setMessages(prev =>
+              prev.map(msg =>
+                msg.id === assistantId
+                  ? { ...msg, sources: parsed }
+                  : msg
+              )
+            );
           }
   
           if (eventType === "done") {
@@ -211,7 +229,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <ChatContext.Provider value={{ messages, setMessages, isThinking, thinkingStep, activeChatId, setActiveChatId, sendMessage, loadChat, startNewChat }}>
+    <ChatContext.Provider value={{ messages, setMessages, isThinking, thinkingStep, activeChatId, setActiveChatId, sendMessage, loadChat, startNewChat, leases }}>
       {children}
     </ChatContext.Provider>
   );

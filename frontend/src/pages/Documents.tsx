@@ -216,6 +216,7 @@ export default function Documents() {
                   <div className="space-y-4">
                     <div className="p-4 bg-white/2 rounded-2xl">Arrendatario: <b className="text-white">{selectedContract.arrendatario || '---'}</b></div>
                     <div className="p-4 bg-white/2 rounded-2xl">Renta: <b className="text-accent-electric font-mono">{selectedContract.renta_mensual ? new Intl.NumberFormat('es-MX', {style:'currency', currency:'MXN'}).format(Number(selectedContract.renta_mensual)) : '---'}</b></div>
+                    <div className="p-4 bg-white/2 rounded-2xl">Superficie: <b className="text-accent-electric font-mono">{selectedContract.superficie_m2 || '---'}</b> m²</div>
                     <div className="p-4 bg-white/2 rounded-2xl">Propiedad: <b className="text-white">{selectedContract.direccion_completa || '---'}</b></div>
                     <div className="p-4 bg-white/2 rounded-2xl"><b>{selectedContract.fecha_inicio ? new Date(selectedContract.fecha_inicio).toLocaleDateString() : 'S/I'}</b> - <b>{selectedContract.fecha_fin ? new Date(selectedContract.fecha_fin).toLocaleDateString() : 'S/I'}</b></div>
                   </div>

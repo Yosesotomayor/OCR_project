@@ -36,11 +36,16 @@ export interface Document {
   size?: string;
 }
 
+export interface Source {
+  filename: string;
+  text: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
   isThinking?: boolean;
-  sources?: string[]; // Source Attribution
+  sources?: Source[]; // Source Attribution
 }
