@@ -56,7 +56,7 @@ ESQUEMA
   "max_superficie_m2": number | null,
   "min_renta_mensual": number | null,
   "max_renta_mensual": number | null,
-  "tipo_moneda": string | null,
+  "tipo_moneda": string | null, # MXN, USD, etc.
   "starts_before": string | null,
   "starts_after": string | null,
   "expires_before": string | null,
@@ -104,7 +104,7 @@ REGLAS
 - Si hay varios contratos relevantes, resume la información más importante.
 - Utiliza el historial de chat para mantener el contexto de la conversación (por ejemplo, si el usuario dice "ese contrato" se refiere al mencionado anteriormente).
 
-FRAGMENTOS DE CONTRATO
+FRAGMENTOS DE CONTRATO (primeros {n_chunks} fragmentos)
 <<<
 {chunks}
 >>>

@@ -8,6 +8,7 @@ from app.models.lease import Chunk
 from app.repositories.chunk_repo import ChunkRepo
 from app.repositories.lease_repo import LeaseRepo
 from app.infrastructure.ml import LLM, EmbeddingModel, Reranker
+from app.schemas.lease import LeaseBase
 from app.schemas.query import ChunkSource, QueryFilters
 from app.prompts.query import (
     ORCHESTRATOR_PROMPT, 
@@ -105,10 +106,11 @@ class QueryService:
             for m in history_messages:
                 if bool(m.metadata_):
                     sources = m.metadata_.get("sources", [])
-                    history_text += "\n\n---\n\n".join(
-                        f"[{s['lease_filename']}]\n{s['text']}"
-                        for s in sources
-                    )
+                    history_text = str()
+                    for s in sources:
+                        lease = await self.lease_repo.get(s['lease_id'])
+                        lease = LeaseBase.model_validate(lease.__dict__).model_dump_json()
+                        history_text += f"\n[{s['lease_filename']}]\n{lease}\n{s['text']}\n---"
 
                 history_text += f"\n\n{m.role.value.capitalize()}: {m.content}\n"
             
@@ -166,12 +168,15 @@ class QueryService:
         sources_payload = [s.model_dump(mode="json") for s in sources]
         yield f"event: sources\ndata: {json.dumps(sources_payload)}\n\n"
 
-        chunks_text = "\n\n---\n\n".join(
-            f"[{s.lease_filename} | {s.sucursal or 'N/A'}]\n{s.text}"
-            for s in sources
-        )
+        chunks_text = str()
+        for s in sources:
+            lease = await self.lease_repo.get(s.lease_id)
+            lease = LeaseBase.model_validate(lease.__dict__).model_dump_json()
+            chunks_text += f"\n[{s.lease_filename}]\n{lease}\n{s.text}\n---"
+
         # Use semantic query or original query for final generation
         prompt = RAG_PROMPT.format(
+            n_chunks=len(sources),
             chunks=chunks_text, 
             history=history_text,
             query=query
