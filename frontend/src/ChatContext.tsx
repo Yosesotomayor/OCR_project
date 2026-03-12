@@ -12,7 +12,7 @@ interface ChatContextType {
   thinkingStep: string;
   activeChatId: string | null;
   setActiveChatId: (id: string | null) => void;
-  sendMessage: (text: string) => Promise<void>;
+  sendMessage: (text: string, leaseFilenames?: string[]) => Promise<void>;
   loadChat: (chatId: string) => Promise<void>;
   startNewChat: () => void;
   leases: LeaseOut[];
@@ -76,7 +76,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [token, startNewChat]);
 
-  const sendMessage = async (text: string) => {
+  const sendMessage = async (text: string, leaseFilenames?: string[]) => {
     if (!text.trim() || !token || isThinking) return;
   
     let currentChatId = activeChatId;
@@ -129,7 +129,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // STEP 3: Call SDK endpoint
       const { response } = await sdkSendMessage({
         path: { chat_id: currentChatId },
-        body: { query: text },
+        body: { query: text, lease_filenames: leaseFilenames },
         parseAs: 'stream'
       });
   

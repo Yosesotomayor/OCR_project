@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, User, Zap, Loader2, ExternalLink, X, FileText } from 'lucide-react';
+import { Send, User, Zap, Loader2, ExternalLink, X, FileText, Filter, Check, Files } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -133,8 +133,10 @@ export default function ChatContainer({
   messages, isThinking, thinkingStep, onSessionCreated 
 }: ChatContainerProps) {
   const [input, setInput] = useState('');
+  const [selectedFilenames, setSelectedFilenames] = useState<string[]>([]);
+  const [isFileSelectorOpen, setIsFileSelectorOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { sendMessage } = useChat();
+  const { sendMessage, leases } = useChat();
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -147,8 +149,16 @@ export default function ChatContainer({
     const messageText = text || input;
     if (!messageText.trim() || isThinking) return;
     setInput('');
-    await sendMessage(messageText);
+    await sendMessage(messageText, selectedFilenames.length > 0 ? selectedFilenames : undefined);
     if (onSessionCreated) onSessionCreated(); 
+  };
+
+  const toggleFile = (filename: string) => {
+    setSelectedFilenames(prev => 
+      prev.includes(filename) 
+        ? prev.filter(f => f !== filename) 
+        : [...prev, filename]
+    );
   };
 
   return (
@@ -230,17 +240,100 @@ export default function ChatContainer({
         )}
       </div>
 
-      <footer className="px-6 pb-10 pt-4 shrink-0 bg-transparent">
+      <footer className="px-6 pb-10 pt-4 shrink-0 bg-transparent relative">
+        <AnimatePresence>
+          {isFileSelectorOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              className="absolute bottom-full mb-4 left-6 right-6 bg-[#111] border border-white/10 rounded-3xl shadow-2xl z-50 overflow-hidden flex flex-col max-h-150"
+            >
+              <div className="p-4 border-b border-white/5 flex items-center justify-between bg-white/2">
+                <div className="flex items-center gap-2">
+                  <Files size={16} className="text-accent-electric" />
+                  <span className="text-xs font-bold text-gray-200">Filtrar por archivos ({selectedFilenames.length})</span>
+                </div>
+                <button 
+                  onClick={() => setIsFileSelectorOpen(false)}
+                  className="p-1 hover:bg-white/10 rounded-lg transition-all"
+                >
+                  <X size={16} className="text-gray-400" />
+                </button>
+              </div>
+              <div className="overflow-y-auto p-2 space-y-1 scrollbar-hide">
+                {leases.length === 0 ? (
+                  <p className="text-[10px] text-gray-500 text-center py-4">No hay documentos disponibles</p>
+                ) : (
+                  leases.map((lease) => (
+                    <button
+                      key={lease.id}
+                      onClick={() => toggleFile(lease.filename)}
+                      className={cn(
+                        "w-full flex items-center justify-between p-2.5 rounded-xl transition-all text-left group",
+                        selectedFilenames.includes(lease.filename) 
+                          ? "bg-accent-electric/10 border border-accent-electric/20" 
+                          : "hover:bg-white/5 border border-transparent"
+                      )}
+                    >
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        <FileText size={14} className={cn(
+                          selectedFilenames.includes(lease.filename) ? "text-accent-electric" : "text-gray-500"
+                        )} />
+                        <span className={cn(
+                          "text-xs truncate",
+                          selectedFilenames.includes(lease.filename) ? "text-white font-medium" : "text-gray-400"
+                        )}>{lease.filename}</span>
+                      </div>
+                      {selectedFilenames.includes(lease.filename) && (
+                        <Check size={14} className="text-accent-electric shrink-0" />
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+              {selectedFilenames.length > 0 && (
+                <div className="p-2 border-t border-white/5 bg-white/2">
+                  <button 
+                    onClick={() => setSelectedFilenames([])}
+                    className="w-full py-1.5 text-[10px] text-gray-500 hover:text-white transition-all uppercase font-bold tracking-widest"
+                  >
+                    Limpiar selección
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div className={cn(
           "relative bg-white/5 border border-white/10 rounded-3xl p-2 flex items-center gap-3 transition-all shadow-2xl backdrop-blur-md",
           isThinking ? "opacity-50 grayscale cursor-not-allowed border-white/5" : "focus-within:border-accent-electric/30"
         )}>
+          <button
+            onClick={() => setIsFileSelectorOpen(!isFileSelectorOpen)}
+            disabled={isThinking}
+            className={cn(
+              "ml-2 p-3 rounded-2xl transition-all relative shrink-0",
+              selectedFilenames.length > 0 
+                ? "bg-accent-electric/20 text-accent-electric" 
+                : "hover:bg-white/10 text-gray-400"
+            )}
+          >
+            <Filter size={20} />
+            {selectedFilenames.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-accent-electric text-black text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-[#0a0a0a]">
+                {selectedFilenames.length}
+              </span>
+            )}
+          </button>
+
           <textarea
             rows={1} value={input}
             disabled={isThinking}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }}}
-            placeholder={isThinking ? "IA procesando reporte..." : "Pregunta sobre tu portafolio legal..."}
+            placeholder={isThinking ? "IA procesando reporte..." : (selectedFilenames.length > 0 ? `Pregunta sobre ${selectedFilenames.length} documentos...` : "Pregunta sobre tu portafolio legal...")}
             className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-gray-200 py-3 px-4 text-sm resize-none shadow-none disabled:cursor-not-allowed"
           />
           <button 
