@@ -30,7 +30,7 @@ Respuesta (solo SI o NO):
 """
 
 FILTER_EXTRACTION_PROMPT = """
-Extrae filtros estructurados de una pregunta sobre contratos de arrendamiento en México.
+Extrae filtros estructurados de una pregunta sobre contratos de arrendamiento en México. Hoy es {date}.
 
 REGLAS
 - Responde solo con JSON válido.

@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime
 from uuid import UUID
 from collections.abc import AsyncGenerator
 from app.core.config import settings
@@ -50,7 +51,10 @@ class QueryService:
         return "SI" in response.strip().upper()
 
     async def _extract_filters(self, query: str) -> QueryFilters | None:
-        prompt = FILTER_EXTRACTION_PROMPT.format(query=query)
+        prompt = FILTER_EXTRACTION_PROMPT.format(
+            date=datetime.now().strftime("%Y-%m-%d"), 
+            query=query
+        )
         response = await self.llm.generate(prompt, temperature=0.0)
         try:
             data = parse_json(response)
