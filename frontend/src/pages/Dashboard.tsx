@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
 import { cn } from '../utils';
-import { ILeaseContract } from '../types';
 import { 
   TrendingUp, ShieldCheck, Calendar, Loader2, Download, 
   FileText, X, Eye, MapPin, Building, DollarSign, 
@@ -12,16 +11,16 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   Cell, PieChart as RePieChart, Pie, LineChart, Line, AreaChart, Area
 } from 'recharts';
-
-const API_URL = import.meta.env.VITE_API_URL;
+import { getDashboardStats, listLeases, getLeaseUrl } from '../client/sdk.gen';
+import { type LeaseOut, type DashboardStats } from '../client/types.gen';
 
 const COLORS = ['#00F0FF', '#7000FF', '#FF00E5', '#33FF00', '#FFB800'];
 
 export default function Dashboard() {
-  const [data, setData] = useState<any>(null);
-  const [contracts, setContracts] = useState<ILeaseContract[]>([]);
+  const [data, setData] = useState<DashboardStats | null>(null);
+  const [contracts, setContracts] = useState<LeaseOut[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedContract, setSelectedContract] = useState<ILeaseContract | null>(null);
+  const [selectedContract, setSelectedContract] = useState<LeaseOut | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const { token } = useAuth();
@@ -29,12 +28,12 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [kpiRes, contractRes] = await Promise.all([
-          fetch(`${API_URL}/analytics/summary`, { headers: { 'Authorization': `Bearer ${token}` } }),
-          fetch(`${API_URL}/contracts`, { headers: { 'Authorization': `Bearer ${token}` } })
+        const [statsRes, leasesRes] = await Promise.all([
+          getDashboardStats(),
+          listLeases()
         ]);
-        if (kpiRes.ok) setData(await kpiRes.json());
-        if (contractRes.ok) setContracts(await contractRes.json());
+        if (statsRes.data) setData(statsRes.data);
+        if (leasesRes.data) setContracts(leasesRes.data.items);
       } catch (error) { console.error(error); } finally { setIsLoading(false); }
     };
     if (token) fetchData();
@@ -45,11 +44,8 @@ export default function Dashboard() {
       if (selectedContract && token) {
         setIsPreviewLoading(true);
         try {
-          const res = await fetch(`${API_URL}/contracts/${selectedContract.id}/presigned_url`, { 
-            headers: { 'Authorization': `Bearer ${token}` } 
-          });
-          const data = await res.json();
-          setPreviewUrl(data.presigned_url);
+          const { data } = await getLeaseUrl({ path: { lease_id: selectedContract.id } });
+          setPreviewUrl(data as string);
         } catch (err) {
           console.error('Error fetching preview URL:', err);
         } finally {
@@ -64,11 +60,10 @@ export default function Dashboard() {
 
   const handleDownload = async (contractId: string, filename: string) => {
     try {
-      const res = await fetch(`${API_URL}/contracts/${contractId}/presigned_url`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await res.json();
-      const a = document.createElement('a'); a.href = data.presigned_url; a.download = filename;
+      const { data } = await getLeaseUrl({ path: { lease_id: contractId }, query: { download: true } });
+      const a = document.createElement('a'); 
+      a.href = data as string; 
+      a.download = filename;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
     } catch (error) { console.error(error); }
   };
@@ -77,6 +72,11 @@ export default function Dashboard() {
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(val);
 
   if (isLoading) return <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-accent-electric w-12 h-12" /></div>;
+
+  const revenueData = data?.revenue_by_state.map(item => ({
+    name: item.estado,
+    value: item.revenue
+  })) || [];
 
   return (
     <div className="p-10 space-y-10 font-sans h-full overflow-y-auto bg-[#050505] text-white selection:bg-accent-electric/30">
@@ -96,7 +96,7 @@ export default function Dashboard() {
         {[
           { label: 'MRR Portafolio', value: formatCurrency(data?.total_mrr || 0), icon: TrendingUp, trend: '+12.5%', color: 'text-accent-electric', bg: 'bg-accent-electric/5' },
           { label: 'Riesgo Expiración', value: data?.upcoming_expirations || 0, icon: Calendar, trend: 'Próx. 30 días', color: 'text-orange-500', bg: 'bg-orange-500/5' },
-          { label: 'Salud Documental', value: `${data?.compliance_score || 0}%`, icon: ShieldCheck, trend: 'Auditado IA', color: 'text-emerald-500', bg: 'bg-emerald-500/5' },
+          { label: 'Salud Documental', value: `${data?.active_percentage || 0}%`, icon: ShieldCheck, trend: 'Auditado IA', color: 'text-emerald-500', bg: 'bg-emerald-500/5' },
           { label: 'Capacidad Activa', value: data?.active_contracts || 0, icon: Users, trend: 'Contratos', color: 'text-blue-500', bg: 'bg-blue-500/5' },
         ].map((kpi, i) => (
           <motion.div 
@@ -128,14 +128,14 @@ export default function Dashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <RePieChart>
                 <Pie
-                  data={data?.revenue_by_zone || []}
+                  data={revenueData}
                   cx="50%" cy="50%"
                   innerRadius={60}
                   outerRadius={100}
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  {(data?.revenue_by_zone || []).map((entry: any, index: number) => (
+                  {revenueData.map((entry: any, index: number) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
@@ -147,7 +147,7 @@ export default function Dashboard() {
             </ResponsiveContainer>
           </div>
           <div className="flex flex-wrap gap-4 justify-center">
-            {(data?.revenue_by_zone || []).map((entry: any, index: number) => (
+            {revenueData.map((entry: any, index: number) => (
               <div key={index} className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
                 <span className="text-[10px] font-bold text-gray-500 uppercase">{entry.name}</span>
@@ -164,7 +164,7 @@ export default function Dashboard() {
           </div>
           <div className="h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data?.expirations_timeline || []}>
+              <BarChart data={data?.expirations_by_month || []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
                 <XAxis dataKey="month" stroke="#444" fontSize={10} tickLine={false} axisLine={false} />
                 <YAxis stroke="#444" fontSize={10} tickLine={false} axisLine={false} />
@@ -204,19 +204,19 @@ export default function Dashboard() {
                           <Building size={18} />
                         </div>
                         <div>
-                          <p className="font-bold text-gray-200 text-sm tracking-tight">{c.tenant_name || c.filename}</p>
+                          <p className="font-bold text-gray-200 text-sm tracking-tight">{c.arrendatario || c.filename}</p>
                           <p className="text-[9px] text-gray-600 flex items-center gap-1 uppercase tracking-widest mt-0.5">
-                            <MapPin size={10} className="text-accent-electric" /> {c.property_zone || 'Zona no especificada'}
+                            <MapPin size={10} className="text-accent-electric" /> {c.estado || 'Zona no especificada'}
                           </p>
                         </div>
                       </div>
                     </td>
                     <td className="px-8 py-6 font-mono text-accent-electric font-black text-sm">
-                      {c.monthly_rent ? formatCurrency(c.monthly_rent) : '---'}
+                      {c.renta_mensual ? formatCurrency(Number(c.renta_mensual)) : '---'}
                     </td>
                     <td className="px-8 py-6">
                       <div className="flex flex-col gap-1">
-                        <span className="text-gray-400 font-mono text-[10px]">{c.expiry_date || 'S/I'}</span>
+                        <span className="text-gray-400 font-mono text-[10px]">{c.fecha_fin ? new Date(c.fecha_fin).toLocaleDateString() : 'S/I'}</span>
                         <div className="w-24 h-1 bg-white/5 rounded-full overflow-hidden">
                           <div className="h-full bg-orange-500 w-[60%] opacity-50" /> {/* Simulación de tiempo transcurrido */}
                         </div>
@@ -225,10 +225,10 @@ export default function Dashboard() {
                     <td className="px-8 py-6">
                       <div className={cn(
                         "inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-[0.15em] border shadow-sm",
-                        c.status === 'completed' ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" :
-                        c.status === 'error' ? "bg-red-500/10 text-red-500 border-red-500/20" : "bg-blue-500/10 text-blue-500 border-blue-500/20 shadow-[0_0_10px_rgba(0,240,255,0.1)]"
+                        c.status === 'ready' ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" :
+                        c.status === 'failed' ? "bg-red-500/10 text-red-500 border-red-500/20" : "bg-blue-500/10 text-blue-500 border-blue-500/20 shadow-[0_0_10px_rgba(0,240,255,0.1)]"
                       )}>
-                        {c.status === 'completed' ? <ShieldCheck size={10}/> : <Activity size={10} className="animate-spin"/>}
+                        {c.status === 'ready' ? <ShieldCheck size={10}/> : <Activity size={10} className="animate-spin"/>}
                         {c.status}
                       </div>
                     </td>
@@ -292,11 +292,11 @@ export default function Dashboard() {
                     
                     <div className="grid gap-4">
                       {[
-                        { label: 'Arrendatario', value: selectedContract.tenant_name || 'No detectado', icon: Users },
-                        { label: 'Renta Mensual', value: selectedContract.monthly_rent ? `${formatCurrency(selectedContract.monthly_rent)} ${selectedContract.currency || 'MXN'}` : '---', icon: DollarSign, highlight: true },
-                        { label: 'Propiedad', value: selectedContract.property_name || '---', icon: Building },
-                        { label: 'Zona Geográfica', value: selectedContract.property_zone || '---', icon: MapPin },
-                        { label: 'Vencimiento', value: selectedContract.expiry_date || 'No especificado', icon: Calendar },
+                        { label: 'Arrendatario', value: selectedContract.arrendatario || 'No detectado', icon: Users },
+                        { label: 'Renta Mensual', value: selectedContract.renta_mensual ? `${formatCurrency(Number(selectedContract.renta_mensual))} ${selectedContract.tipo_moneda || 'MXN'}` : '---', icon: DollarSign, highlight: true },
+                        { label: 'Propiedad', value: selectedContract.sucursal || '---', icon: Building },
+                        { label: 'Zona Geográfica', value: selectedContract.estado || '---', icon: MapPin },
+                        { label: 'Vencimiento', value: selectedContract.fecha_fin ? new Date(selectedContract.fecha_fin).toLocaleDateString() : 'No especificado', icon: Calendar },
                       ].map((item, idx) => (
                         <div key={idx} className="p-6 bg-white/[0.03] border border-white/5 rounded-3xl group hover:bg-white/[0.05] transition-all">
                           <p className="text-[9px] text-gray-600 uppercase font-black tracking-widest mb-2 flex items-center gap-2">

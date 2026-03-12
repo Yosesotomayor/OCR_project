@@ -6,44 +6,32 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../hooks/useAuth';
+import { listLeases, uploadLease, deleteLease, getLease, getLeaseUrl } from '../client/sdk.gen';
+import { type LeaseOut } from '../client/types.gen';
+import { toast } from 'sonner';
 
-const API_URL = import.meta.env.VITE_API_URL;
-
-export interface ILeaseContract {
-  id: string;
-  filename: string;
-  status: 'processing' | 'completed' | 'error';
-  progress: number;
-  tenant_name?: string;
-  monthly_rent?: number;
-  currency?: string;
-  start_date?: string;
-  expiry_date?: string;
-  property_name?: string;
-  property_zone?: string;
-}
-
-const StatusBadge = memo(({ status, progress: initialProgress, contractId, onFinished }: { status: string, progress: number, contractId: string, onFinished: () => void }) => {
+const StatusBadge = memo(({ status, contractId, onFinished }: { status: string, contractId: string, onFinished: () => void }) => {
   const [currentStatus, setCurrentStatus] = useState(status);
-  const [progress, setProgress] = useState(initialProgress);
-  const { token } = useAuth();
+  const [progress, setProgress] = useState(0);
 
   useEffect(() => {
-    if (currentStatus !== 'processing') return;
+    if (currentStatus !== 'processing' && currentStatus !== 'uploaded') return;
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`${API_URL}/contracts/${contractId}/status`, { headers: { 'Authorization': `Bearer ${token}` } });
-        if (res.ok) {
-          const data = await res.json();
-          setProgress(data.progress);
-          if (data.status !== 'processing') { setCurrentStatus(data.status); clearInterval(interval); onFinished(); }
+        const { data } = await getLease({ path: { lease_id: contractId } });
+        if (data) {
+          if (data.status !== 'processing' && data.status !== 'uploaded') { 
+            setCurrentStatus(data.status); 
+            clearInterval(interval); 
+            onFinished(); 
+          }
         }
       } catch (e) { clearInterval(interval); }
     }, 2000);
     return () => clearInterval(interval);
-  }, [currentStatus, contractId, onFinished, token]);
+  }, [currentStatus, contractId, onFinished]);
 
-  if (currentStatus === 'processing') {
+  if (currentStatus === 'processing' || currentStatus === 'uploaded') {
     return (
       <div className="w-full max-w-[100px] space-y-1">
         <div className="flex justify-between text-[7px] font-black text-accent-electric uppercase"><span>Procesando</span><span>{progress}%</span></div>
@@ -51,17 +39,17 @@ const StatusBadge = memo(({ status, progress: initialProgress, contractId, onFin
       </div>
     );
   }
-  const config = { completed: { color: "text-emerald-500 bg-emerald-500/10", icon: CheckCircle, label: "Listo" }, error: { color: "text-red-500 bg-red-500/10", icon: AlertTriangle, label: "Error" } };
-  const c = config[currentStatus as keyof typeof config] || config.error;
+  const config = { ready: { color: "text-emerald-500 bg-emerald-500/10", icon: CheckCircle, label: "Listo" }, failed: { color: "text-red-500 bg-red-500/10", icon: AlertTriangle, label: "Error" } };
+  const c = config[currentStatus as keyof typeof config] || config.failed;
   return <div className={cn("flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-black uppercase border border-white/5", c.color)}><c.icon size={8}/>{c.label}</div>;
 });
 
 export default function Documents() {
-  const [contracts, setContracts] = useState<ILeaseContract[]>([]);
+  const [contracts, setContracts] = useState<LeaseOut[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortConfig, setSortConfig] = useState<{ key: keyof ILeaseContract, dir: 'asc' | 'desc' }>({ key: 'filename', dir: 'asc' });
+  const [sortConfig, setSortConfig] = useState<{ key: keyof LeaseOut, dir: 'asc' | 'desc' }>({ key: 'filename', dir: 'asc' });
   const [isUploading, setIsUploading] = useState(false);
-  const [selectedContract, setSelectedContract] = useState<ILeaseContract | null>(null);
+  const [selectedContract, setSelectedContract] = useState<LeaseOut | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -69,10 +57,10 @@ export default function Documents() {
 
   const fetchContracts = useCallback(async () => {
     try {
-      const response = await fetch(`${API_URL}/contracts`, { headers: { 'Authorization': `Bearer ${token}` } });
-      if (response.ok) setContracts(await response.json());
+      const { data } = await listLeases();
+      if (data) setContracts(data.items);
     } catch (err) { console.error(err); }
-  }, [token]);
+  }, []);
 
   useEffect(() => { if (token) fetchContracts(); }, [token, fetchContracts]);
 
@@ -81,11 +69,8 @@ export default function Documents() {
       if (selectedContract && token) {
         setIsPreviewLoading(true);
         try {
-          const res = await fetch(`${API_URL}/contracts/${selectedContract.id}/presigned_url`, { 
-            headers: { 'Authorization': `Bearer ${token}` } 
-          });
-          const data = await res.json();
-          setPreviewUrl(data.presigned_url);
+          const { data } = await getLeaseUrl({ path: { lease_id: selectedContract.id } });
+          setPreviewUrl(data as string);
         } catch (err) {
           console.error('Error fetching preview URL:', err);
         } finally {
@@ -103,26 +88,27 @@ export default function Documents() {
     if (fileArray.length === 0) return;
     setIsUploading(true);
     for (const file of fileArray) {
-      const formData = new FormData(); formData.append('file', file);
-      await fetch(`${API_URL}/upload`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData });
+      const { error } = await uploadLease({ body: { file } });
+      if (error) {
+        toast.error(error.detail);
+      }
     }
-    fetchContracts(); setIsUploading(false);
+    fetchContracts(); 
+    setIsUploading(false);
   };
 
   const handleDownload = async (id: string, filename: string) => {
-    const res = await fetch(`${API_URL}/contracts/${id}/presigned_url`, { headers: { 'Authorization': `Bearer ${token}` } });
-    const data = await res.json();
-    const a = document.createElement('a'); a.href = data.presigned_url; a.download = filename;
+    const { data } = await getLeaseUrl({ path: { lease_id: id }, query: { download: true } });
+    const a = document.createElement('a'); 
+    a.href = data as string; 
+    a.download = filename;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   };
 
   const handleDelete = async (id: string, silent = false) => {
     if (!silent && !confirm("¿Confirmar eliminación de este contrato?")) return;
     try {
-      await fetch(`${API_URL}/admin/contracts/${id}`, { 
-        method: 'DELETE', 
-        headers: { 'Authorization': `Bearer ${token}` } 
-      });
+      await deleteLease({ path: { lease_id: id } });
       if (!silent) fetchContracts();
     } catch (err) { console.error(err); }
   };
@@ -130,7 +116,7 @@ export default function Documents() {
   const handleBulkDelete = async () => {
     if (!confirm(`¿Estás seguro de eliminar ${selectedIds.length} contratos? Esta acción no se puede deshacer.`)) return;
     
-    setIsUploading(true); // Reusamos el estado de carga para mostrar feedback
+    setIsUploading(true);
     for (const id of selectedIds) {
       await handleDelete(id, true);
     }
@@ -139,15 +125,15 @@ export default function Documents() {
     setIsUploading(false);
   };
 
-  const toggleSort = (key: keyof ILeaseContract) => {
+  const toggleSort = (key: keyof LeaseOut) => {
     setSortConfig(prev => ({ key, dir: prev.key === key && prev.dir === 'asc' ? 'desc' : 'asc' }));
   };
 
   const sortedContracts = useMemo(() => {
-    const filtered = contracts.filter(c => (c.tenant_name?.toLowerCase() || c.filename.toLowerCase()).includes(searchTerm.toLowerCase()));
+    const filtered = contracts.filter(c => (c.arrendatario?.toLowerCase() || c.filename.toLowerCase()).includes(searchTerm.toLowerCase()));
     return [...filtered].sort((a, b) => {
-      const valA = a[sortConfig.key] || '';
-      const valB = b[sortConfig.key] || '';
+      const valA = (a[sortConfig.key] as string) || '';
+      const valB = (b[sortConfig.key] as string) || '';
       if (valA < valB) return sortConfig.dir === 'asc' ? -1 : 1;
       if (valA > valB) return sortConfig.dir === 'asc' ? 1 : -1;
       return 0;
@@ -173,10 +159,10 @@ export default function Documents() {
             <thead className="sticky top-0 bg-[#0d0d0d] text-gray-500 font-black uppercase tracking-widest border-b border-white/5 z-10">
               <tr>
                 <th className="px-6 py-4 w-10"><input type="checkbox" checked={selectedIds.length === sortedContracts.length} onChange={(e) => setSelectedIds(e.target.checked ? sortedContracts.map(c => c.id) : [])} className="accent-accent-electric"/></th>
-                <th className="px-6 py-4 cursor-pointer hover:text-accent-electric transition-colors" onClick={() => toggleSort('tenant_name')}>Arrendatario <ArrowUpDown size={10} className="inline ml-1"/></th>
-                <th className="px-6 py-4 cursor-pointer hover:text-accent-electric transition-colors" onClick={() => toggleSort('monthly_rent')}>Renta <ArrowUpDown size={10} className="inline ml-1"/></th>
-                <th className="px-6 py-4 cursor-pointer hover:text-accent-electric transition-colors" onClick={() => toggleSort('start_date')}>Inicio <ArrowUpDown size={10} className="inline ml-1"/></th>
-                <th className="px-6 py-4 cursor-pointer hover:text-accent-electric transition-colors" onClick={() => toggleSort('expiry_date')}>Vencimiento <ArrowUpDown size={10} className="inline ml-1"/></th>
+                <th className="px-6 py-4 cursor-pointer hover:text-accent-electric transition-colors" onClick={() => toggleSort('arrendatario')}>Arrendatario <ArrowUpDown size={10} className="inline ml-1"/></th>
+                <th className="px-6 py-4 cursor-pointer hover:text-accent-electric transition-colors" onClick={() => toggleSort('renta_mensual')}>Renta <ArrowUpDown size={10} className="inline ml-1"/></th>
+                <th className="px-6 py-4 cursor-pointer hover:text-accent-electric transition-colors" onClick={() => toggleSort('fecha_inicio')}>Inicio <ArrowUpDown size={10} className="inline ml-1"/></th>
+                <th className="px-6 py-4 cursor-pointer hover:text-accent-electric transition-colors" onClick={() => toggleSort('fecha_fin')}>Vencimiento <ArrowUpDown size={10} className="inline ml-1"/></th>
                 <th className="px-6 py-4">Status</th>
                 <th className="px-6 py-4 text-right">Acciones</th>
               </tr>
@@ -185,11 +171,11 @@ export default function Documents() {
               {sortedContracts.map((c) => (
                 <tr key={c.id} className="hover:bg-white/[0.02] transition-colors group text-gray-300">
                   <td className="px-6 py-5 text-center"><input type="checkbox" checked={selectedIds.includes(c.id)} onChange={(e) => setSelectedIds(e.target.checked ? [...selectedIds, c.id] : selectedIds.filter(id => id !== c.id))} className="accent-accent-electric"/></td>
-                  <td className="px-6 py-5"><p className="font-bold text-white text-xs">{c.tenant_name || c.filename}</p><p className="text-[8px] text-gray-600 uppercase tracking-tighter">{c.property_zone || 'S/I'}</p></td>
-                  <td className="px-6 py-5 font-mono text-accent-electric font-bold">{c.monthly_rent ? new Intl.NumberFormat('es-MX', {style:'currency', currency:'MXN'}).format(c.monthly_rent) : '---'}</td>
-                  <td className="px-6 py-5 font-mono">{c.start_date || 'S/I'}</td>
-                  <td className="px-6 py-5 font-mono">{c.expiry_date || 'S/I'}</td>
-                  <td className="px-6 py-5"><StatusBadge status={c.status} progress={c.progress} contractId={c.id} onFinished={fetchContracts} /></td>
+                  <td className="px-6 py-5"><p className="font-bold text-white text-xs">{c.arrendatario || c.filename}</p><p className="text-[8px] text-gray-600 uppercase tracking-tighter">{c.estado || 'S/I'}</p></td>
+                  <td className="px-6 py-5 font-mono text-accent-electric font-bold">{c.renta_mensual ? new Intl.NumberFormat('es-MX', {style:'currency', currency:'MXN'}).format(Number(c.renta_mensual)) : '---'}</td>
+                  <td className="px-6 py-5 font-mono">{c.fecha_inicio ? new Date(c.fecha_inicio).toLocaleDateString() : 'S/I'}</td>
+                  <td className="px-6 py-5 font-mono">{c.fecha_fin ? new Date(c.fecha_fin).toLocaleDateString() : 'S/I'}</td>
+                  <td className="px-6 py-5"><StatusBadge status={c.status} contractId={c.id} onFinished={fetchContracts} /></td>
                   <td className="px-6 py-5 text-right"><div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => setSelectedContract(c)} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg"><Eye size={14}/></button><button onClick={() => handleDownload(c.id, c.filename)} className="p-2 bg-accent-electric/10 hover:bg-accent-electric/20 rounded-lg text-accent-electric"><Download size={14}/></button><button onClick={() => handleDelete(c.id)} className="p-2 bg-red-500/5 hover:bg-red-500/20 rounded-lg text-red-500"><Trash2 size={14}/></button></div></td>
                 </tr>
               ))}
@@ -228,10 +214,10 @@ export default function Documents() {
                 <div className="flex-1 bg-[#0a0a0a] p-10 space-y-8 overflow-y-auto">
                   <h4 className="text-[10px] font-black uppercase text-accent-electric flex items-center gap-2"><ShieldCheck size={14}/> Análisis LeaseLens AI</h4>
                   <div className="space-y-4">
-                    <div className="p-4 bg-white/2 rounded-2xl">Arrendatario: <b className="text-white">{selectedContract.tenant_name || '---'}</b></div>
-                    <div className="p-4 bg-white/2 rounded-2xl">Renta: <b className="text-accent-electric font-mono">{selectedContract.monthly_rent ? new Intl.NumberFormat('es-MX', {style:'currency', currency:'MXN'}).format(selectedContract.monthly_rent) : '---'}</b></div>
-                    <div className="p-4 bg-white/2 rounded-2xl text-[10px]">Inicio: <b>{selectedContract.start_date || 'S/I'}</b> | Vencimiento: <b>{selectedContract.expiry_date || 'S/I'}</b></div>
-                    <div className="p-4 bg-white/2 rounded-2xl">Propiedad: <b className="text-white">{selectedContract.property_name || '---'}</b></div>
+                    <div className="p-4 bg-white/2 rounded-2xl">Arrendatario: <b className="text-white">{selectedContract.arrendatario || '---'}</b></div>
+                    <div className="p-4 bg-white/2 rounded-2xl">Renta: <b className="text-accent-electric font-mono">{selectedContract.renta_mensual ? new Intl.NumberFormat('es-MX', {style:'currency', currency:'MXN'}).format(Number(selectedContract.renta_mensual)) : '---'}</b></div>
+                    <div className="p-4 bg-white/2 rounded-2xl">Propiedad: <b className="text-white">{selectedContract.direccion_completa || '---'}</b></div>
+                    <div className="p-4 bg-white/2 rounded-2xl"><b>{selectedContract.fecha_inicio ? new Date(selectedContract.fecha_inicio).toLocaleDateString() : 'S/I'}</b> - <b>{selectedContract.fecha_fin ? new Date(selectedContract.fecha_fin).toLocaleDateString() : 'S/I'}</b></div>
                   </div>
                   <button onClick={() => handleDownload(selectedContract.id, selectedContract.filename)} className="w-full bg-accent-electric text-black py-4 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 hover:bg-white transition-all mt-auto shadow-lg"><Download size={16} /> Descargar PDF Original</button>
                 </div>

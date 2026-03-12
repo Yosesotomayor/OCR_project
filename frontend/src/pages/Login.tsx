@@ -1,38 +1,32 @@
 import { useState } from 'react';
 import AuthLayout from '../layouts/AuthLayout';
-import { Zap, ShieldCheck, AlertCircle, Eye, EyeOff } from 'lucide-react'; // Import Eye and EyeOff
+import { Zap, ShieldCheck, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../utils';
-import { useAuth } from '../hooks/useAuth'; // Import useAuth
-import NeuralNetworkBackground from '../components/NeuralNetworkBackground'; // Import NeuralNetworkBackground
-
-const API_URL = import.meta.env.VITE_API_URL;
+import { useAuth } from '../hooks/useAuth';
+import NeuralNetworkBackground from '../components/NeuralNetworkBackground';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [emailError, setEmailError] = useState('');
+  const [usernameError, setUsernameError] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false); // New state for password visibility
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
-  const { login } = useAuth(); // Destructure login from useAuth
+  const { login } = useAuth();
 
-  const validateEmail = (inputEmail: string) => {
-    if (!inputEmail.endsWith('@vertiche.mx')) {
-      setEmailError('El correo debe ser de dominio @vertiche.mx');
-      return false;
-    }
-    setEmailError('');
+  const validateUsername = (input: string) => {
+    setUsernameError('');
     return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
-    setEmailError('');
+    setUsernameError('');
 
-    if (!validateEmail(email)) {
+    if (!validateUsername(username)) {
       return;
     }
 
@@ -43,8 +37,8 @@ export default function Login() {
 
     setIsLoading(true);
     try {
-      await login(email, password);
-      navigate('/dashboard'); // Redirect to dashboard on successful login
+      await login(username, password);
+      navigate('/dashboard');
     } catch (error: any) {
       console.error('Error de autenticación:', error.message);
       setLoginError(error.message || 'Error de autenticación');
@@ -54,7 +48,7 @@ export default function Login() {
   };
 
   return (
-    <AuthLayout background={<NeuralNetworkBackground />}> {/* Pass NeuralNetworkBackground as prop */}
+    <AuthLayout background={<NeuralNetworkBackground />}>
       <div className="text-center mb-12">
         <div className="w-20 h-20 bg-[#0a0a0a] border border-[#1f1f1f] rounded-[24px] mx-auto mb-8 flex items-center justify-center shadow-2xl relative group">
           <div className="absolute inset-0 bg-accent-electric/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -70,43 +64,38 @@ export default function Login() {
       
       <form className="space-y-8" onSubmit={handleSubmit}>
         <div className="space-y-2">
-          <label className="text-[10px] font-black text-gray-600 uppercase tracking-widest ml-1">Protocolo de Identidad</label>
           <input 
-            type="email" 
-            placeholder="USUARIO@VERTICHE.MX"
-            value={email}
+            type="username" 
+            placeholder="username"
+            value={username}
             onChange={(e) => {
-              setEmail(e.target.value);
-              validateEmail(e.target.value);
+              setUsername(e.target.value);
+              validateUsername(e.target.value);
             }}
-            onBlur={(e) => validateEmail(e.target.value)}
+            onBlur={(e) => validateUsername(e.target.value)}
             className={cn(
-              "w-full bg-[#0a0a0a] border rounded-xl px-5 py-4 text-white focus:outline-none focus:border-accent-electric/50 focus:ring-1 focus:ring-accent-electric/20 transition-all placeholder:text-gray-800 text-sm font-bold tracking-tight uppercase",
-              emailError ? "border-red-500" : "border-[#1f1f1f]"
+              "w-full bg-[#0a0a0a] border rounded-xl px-5 py-4 text-white focus:outline-none focus:border-accent-electric/50 focus:ring-1 focus:ring-accent-electric/20 transition-all placeholder:text-gray-800 text-sm font-bold tracking-tight",
+              usernameError ? "border-red-500" : "border-[#1f1f1f]"
             )}
           />
-          {emailError && (
+          {usernameError && (
             <p className="text-red-500 text-xs flex items-center gap-1 ml-1">
-              <AlertCircle size={12} /> {emailError}
+              <AlertCircle size={12} /> {usernameError}
             </p>
           )}
         </div>
         
         <div className="space-y-2">
-          <div className="flex justify-between items-center ml-1">
-            <label className="text-[10px] font-black text-gray-600 uppercase tracking-widest">Código de Acceso</label>
-            <a href="#" className="text-[9px] text-accent-electric/50 hover:text-accent-electric transition-colors uppercase font-black">Recuperar</a>
-          </div>
-          <div className="relative"> {/* Added relative div for positioning */}
+          <div className="relative">
             <input 
-              type={showPassword ? 'text' : 'password'} // Toggle type
+              type={showPassword ? 'text' : 'password'}
               placeholder="••••••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-5 py-4 text-white focus:outline-none focus:border-accent-electric/50 focus:ring-1 focus:ring-accent-electric/20 transition-all placeholder:text-gray-800 text-sm pr-12" // Added pr-12 for button space
+              className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-5 py-4 text-white focus:outline-none focus:border-accent-electric/50 focus:ring-1 focus:ring-accent-electric/20 transition-all placeholder:text-gray-800 text-sm pr-12"
             />
             <button
-              type="button" // Important: prevent form submission
+              type="button"
               onClick={() => setShowPassword(!showPassword)}
               className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-white transition-colors"
             >
@@ -125,16 +114,12 @@ export default function Login() {
           type="submit"
           disabled={isLoading}
           className={cn(
-            "w-full bg-accent-electric hover:bg-accent-electric-hover text-black font-black py-5 rounded-xl mt-6 transition-all shadow-[0_0_30px_rgba(168,85,247,0.2)] active:scale-[0.98] uppercase tracking-[0.2em] text-xs",
+            "w-full bg-accent-electric hover:bg-accent-electric/90 text-black font-black py-5 rounded-xl mt-6 transition-all shadow-[0_0_30px_rgba(0,240,255,0.2)] active:scale-[0.98] uppercase tracking-[0.2em] text-xs",
             isLoading && "opacity-50 cursor-not-allowed"
           )}
         >
           {isLoading ? 'Autenticando...' : 'Autenticar Sesión'}
         </button>
-        
-        <p className="text-center text-gray-700 text-[10px] mt-10 font-bold uppercase tracking-widest">
-          ¿Sin credenciales? <a href="/register" className="text-accent-electric/60 hover:text-accent-electric transition-colors">Solicitar Acceso</a>
-        </p>
       </form>
     </AuthLayout>
   );

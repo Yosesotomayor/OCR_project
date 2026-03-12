@@ -95,7 +95,7 @@ export default function ChatContainer({
                         </div>
                       </div>
                     ) : msg.role === 'assistant' ? (
-                      <div className="prose prose-invert prose-sm max-w-none prose-table:border prose-table:border-white/10 prose-th:bg-white/5 prose-th:p-2 prose-td:p-2 prose-td:border-t prose-td:border-white/5 prose-table:my-6">
+                      <div className="prose prose-sm max-w-none prose-custom prose-table:border prose-table:border-white/10 prose-th:bg-white/5 prose-th:p-2 prose-td:p-2 prose-td:border-t prose-td:border-white/5 prose-table:my-6 prose-headings:font-bold prose-headings:tracking-tight prose-a:underline prose-a:underline-offset-4 hover:prose-a:text-accent-electric/80 transition-all">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
                           {msg.content}
                         </ReactMarkdown>

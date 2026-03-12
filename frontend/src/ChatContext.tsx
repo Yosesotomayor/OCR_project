@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { ChatMessage } from './types';
 import { useAuth } from './hooks/useAuth';
+import { createChat, getMessages, sendMessage as sdkSendMessage } from './client/sdk.gen';
+import { client } from './api/client';
 
 interface ChatContextType {
   messages: ChatMessage[];
@@ -15,7 +17,6 @@ interface ChatContextType {
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
-const API_URL = import.meta.env.VITE_API_URL;
 
 export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -24,7 +25,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [activeChatId, setActiveChatId] = useState<string | null>(localStorage.getItem('last_active_chat_id'));
   const { token } = useAuth();
 
-  // Persistencia automática de activeChatId
   useEffect(() => {
     if (activeChatId) {
       localStorage.setItem('last_active_chat_id', activeChatId);
@@ -42,18 +42,15 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loadChat = useCallback(async (chatId: string) => {
     if (!token) return;
     setActiveChatId(chatId);
-    setMessages([]); // Limpiar antes de cargar
+    setMessages([]);
     try {
-      const res = await fetch(`${API_URL}/chats/${chatId}/messages`, { 
-        headers: { 'Authorization': `Bearer ${token}` } 
-      });
-      if (res.ok) {
-        const history = await res.json();
-        setMessages(history.map((m: any) => ({
+      const { data } = await getMessages({ path: { chat_id: chatId } });
+      if (data) {
+        setMessages(data.map((m: any) => ({
           id: m.id || Math.random().toString(),
           role: m.role,
           content: m.content,
-          timestamp: new Date(m.timestamp).toLocaleTimeString()
+          timestamp: new Date(m.created_at).toLocaleTimeString()
         })));
       }
     } catch (err) { console.error(err); }
@@ -61,60 +58,140 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || !token || isThinking) return;
-
+  
+    let currentChatId = activeChatId;
+  
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
-      role: 'user',
+      role: "user",
       content: text,
       timestamp: new Date().toLocaleTimeString(),
     };
-
+  
     setMessages(prev => [...prev, userMsg]);
     setIsThinking(true);
-    setThinkingStep('Iniciando protocolos...');
-
+    setThinkingStep("Iniciando protocolos...");
+  
     const assistantId = (Date.now() + 1).toString();
-    setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: new Date().toLocaleTimeString() }]);
-
+    setMessages(prev => [
+      ...prev,
+      { id: assistantId, role: "assistant", content: "", timestamp: new Date().toLocaleTimeString() }
+    ]);
+  
     try {
-      const steps = ['Sincronizando con GPU...', 'Consultando Base de Vectores...', 'Analizando Portafolio...', 'Generando Reporte Legal...'];
+      // STEP 1: Create chat if needed
+      if (!currentChatId) {
+        setThinkingStep("Creando nueva sesión...");
+  
+        const { data: newChat } = await createChat({
+          body: { content: text }
+        });
+  
+        if (!newChat) throw new Error("Failed to create chat");
+  
+        currentChatId = newChat.id;
+        setActiveChatId(currentChatId);
+      }
+  
+      // STEP 2: Thinking steps animation
+      const steps = [
+        "Sincronizando con GPU...",
+        "Consultando Base de Vectores...",
+        "Analizando Portafolio...",
+        "Generando Reporte Legal..."
+      ];
+  
       let stepIdx = 0;
       const stepInterval = setInterval(() => {
         if (stepIdx < steps.length) setThinkingStep(steps[stepIdx++]);
       }, 2000);
-
-      const response = await fetch(`${API_URL}/chat/stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ question: text, chat_id: activeChatId })
+  
+      // STEP 3: Call SDK endpoint
+      const { response } = await sdkSendMessage({
+        path: { chat_id: currentChatId },
+        body: { query: text },
+        parseAs: 'stream'
       });
-
-      clearInterval(stepInterval);
+  
+      console.log("Response:", response);
       if (!response.ok) throw new Error("GPU Timeout");
-
-      const newChatId = response.headers.get("X-Chat-ID");
-      if (newChatId && newChatId !== activeChatId) {
-        setActiveChatId(newChatId);
-      }
-
-      const reader = response.body?.getReader();
+      if (!response.body) throw new Error("No stream");
+  
+      console.log("Body:", response.body);
+      const reader = response.body.getReader();
       const decoder = new TextDecoder();
+  
+      let buffer = "";
       let accumulatedContent = "";
-
-      if (reader) {
-        setThinkingStep('Recibiendo datos...');
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          accumulatedContent += decoder.decode(value, { stream: true });
-          setMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: accumulatedContent } : msg));
+  
+      setThinkingStep("Recibiendo datos...");
+  
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+  
+        buffer += decoder.decode(value, { stream: true });
+  
+        // Split SSE events
+        const events = buffer.split("\n\n");
+        buffer = events.pop() || "";
+  
+        for (const eventStr of events) {
+          const lines = eventStr.split("\n");
+  
+          let eventType = "message";
+          let dataStr = "";
+  
+          for (const line of lines) {
+            if (line.startsWith("event:"))
+              eventType = line.replace("event:", "").trim();
+  
+            if (line.startsWith("data:"))
+              dataStr += line.replace("data:", "").trim();
+          }
+  
+          if (!dataStr) continue;
+  
+          const parsed = JSON.parse(dataStr);
+  
+          if (eventType === "token") {
+            accumulatedContent += parsed.token;
+  
+            setMessages(prev =>
+              prev.map(msg =>
+                msg.id === assistantId
+                  ? { ...msg, content: accumulatedContent }
+                  : msg
+              )
+            );
+          }
+  
+          if (eventType === "sources") {
+            console.log("Sources:", parsed);
+          }
+  
+          if (eventType === "done") {
+            clearInterval(stepInterval);
+          }
         }
       }
+  
     } catch (err) {
-      setMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: "⚠️ Error de conexión. La IA está tardando demasiado en responder." } : msg));
+      console.error(err);
+  
+      setMessages(prev =>
+        prev.map(msg =>
+          msg.id === assistantId
+            ? {
+                ...msg,
+                content: "⚠️ Error de conexión. La IA está tardando demasiado en responder."
+              }
+            : msg
+        )
+      );
     } finally {
       setIsThinking(false);
-      setThinkingStep('');
+      setThinkingStep("");
     }
   };
 

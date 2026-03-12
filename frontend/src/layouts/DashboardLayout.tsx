@@ -6,8 +6,6 @@ import {
   Users,
   LogOut,
   Zap,
-  CreditCard,
-  Terminal
 } from 'lucide-react';
 import { cn } from '../utils';
 import { useAuth } from '../hooks/useAuth';
@@ -16,7 +14,6 @@ const baseNavItems = [ // Renamed to baseNavItems
   { icon: LayoutDashboard, label: 'Inteligencia', href: '/dashboard' },
   { icon: MessageSquare, label: 'Chat AI', href: '/dashboard/chat' },
   { icon: FileText, label: 'Contratos', href: '/dashboard/documents' },
-  { icon: CreditCard, label: 'Suscripción', href: '/dashboard/subscription', adminOnly: false }, // Added adminOnly flag
   { icon: Users, label: 'Acceso', href: '/dashboard/admin', adminOnly: true }, // Added adminOnly flag
 ];
 
@@ -61,21 +58,6 @@ export default function DashboardLayout() {
         </div>
 
         <div className="mt-auto p-6 border-t border-[#1f1f1f] space-y-4">
-          {isAdmin && (
-            <NavLink
-              to="/dashboard/admin/logs"
-              className={({ isActive }) => cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-300",
-                isActive
-                  ? "bg-accent-electric/10 text-accent-electric border border-accent-electric/20"
-                  : "text-gray-500 hover:text-gray-200 hover:bg-white/5"
-              )}
-            >
-              <Terminal className="w-4 h-4" />
-              <span className="font-medium text-sm">Panel de Logs</span>
-            </NavLink>
-          )}
-
           <button
             onClick={logout}
             className="flex items-center gap-3 px-3 py-2 w-full text-gray-500 hover:text-red-400 transition-colors text-sm"
@@ -83,7 +65,8 @@ export default function DashboardLayout() {
             <LogOut className="w-4 h-4" />
             <span className="font-medium">Salir</span>
           </button>
-        </div>      </aside>
+        </div>
+      </aside>
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto relative bg-[#050505]">

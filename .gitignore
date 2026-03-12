@@ -1,70 +1,13 @@
-# --- General / OS ---
 .DS_Store
-Thumbs.db
 .vscode/
-.idea/
-*.log
-*.swp
 
-# --- Environment Variables (CRÍTICO) ---
-.env
-.env.*
-!.env.example
-
-# --- Python (Backend & ML Service) ---
-__pycache__/
-*.py[cod]
-*$py.class
 .venv/
-env/
-**venv/**
-venv/
-**venv/
-.python-version
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
+.env
 
-# Dependencias de 'uv' y archivos de compilación
-.uv/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+__pycache__/
 
-# --- Node.js / React (Frontend) ---
 frontend/node_modules/
 frontend/dist/
 frontend/build/
 frontend/.eslintcache
-frontend/coverage/
-
-# --- Docker & Databases ---
-postgres_data/
-chroma_data/
-storage/
-**/data/
-
-# --- ML Models ---
-
-models/
-*.pth
-*.onnx
-*.bin
-
-# Ollama
-
-ollama_data/
-ollama_storage/
+frontend/src/client/

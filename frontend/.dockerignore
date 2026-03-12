@@ -3,4 +3,3 @@ dist
 .DS_Store
 .vscode
 .git
-__pycache__

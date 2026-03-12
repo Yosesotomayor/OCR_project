@@ -4,15 +4,15 @@ import Dashboard from './pages/Dashboard';
 import Chat from './pages/Chat';
 import Documents from './pages/Documents';
 import Admin from './pages/Admin';
-import AdminLogs from './pages/AdminLogs';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Bootstrap from './pages/Bootstrap';
 import Landing from './pages/Landing'; 
-import Subscription from './pages/Subscription'; 
 import Forbidden from './pages/Forbidden'; 
 import { AuthProvider, useAuth } from './hooks/useAuth.tsx'; 
 import { ChatProvider } from './ChatContext';
 import { Zap } from 'lucide-react';
+import { Toaster } from 'sonner';
 
 const VITE_ENABLE_LANDING_PAGE = import.meta.env.VITE_ENABLE_LANDING_PAGE === 'true';
 
@@ -60,6 +60,7 @@ export default function App() {
             {/* --- RUTAS PÚBLICAS --- */}
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/bootstrap" element={<Bootstrap />} />
             <Route path="/forbidden" element={<Forbidden />} />
             
             <Route 
@@ -85,28 +86,12 @@ export default function App() {
               <Route index element={<Dashboard />} />
               <Route path="chat" element={<Chat />} />
               <Route path="documents" element={<Documents />} />
-              <Route 
-                path="subscription" 
-                element={
-                  <ProtectedRoute adminOnly={true}>
-                    <Subscription />
-                  </ProtectedRoute>
-                } 
-              />
               
               <Route 
                 path="admin" 
                 element={
                   <ProtectedRoute adminOnly={true}>
                     <Admin />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="admin/logs" 
-                element={
-                  <ProtectedRoute adminOnly={true}>
-                    <AdminLogs />
                   </ProtectedRoute>
                 } 
               />
@@ -121,6 +106,7 @@ export default function App() {
           </Routes>
         </ChatProvider>
       </AuthProvider>
+      <Toaster theme="dark" richColors/>
     </BrowserRouter>
   );
 }

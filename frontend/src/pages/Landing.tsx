@@ -1,7 +1,24 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Zap, LogIn, UserPlus } from 'lucide-react';
+import { Zap, LogIn, UserPlus, ShieldAlert } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
 
 export default function Landing() {
+  const { checkAuthStatus } = useAuth();
+  const [isInitialized, setIsInitialized] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const data = await checkAuthStatus();
+        setIsInitialized(data?.initialized ?? true);
+      } catch (e) {
+        setIsInitialized(true);
+      }
+    };
+    checkStatus();
+  }, [checkAuthStatus]);
+
   return (
     <div className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-center p-8">
       <div className="text-center mb-12">
@@ -17,20 +34,32 @@ export default function Landing() {
       </div>
 
       <div className="flex flex-col sm:flex-row gap-6">
-        <Link
-          to="/login"
-          className="bg-accent-electric text-black px-8 py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-3 transition-all shadow-lg shadow-accent-electric/20 hover:scale-105 active:scale-95"
-        >
-          <LogIn size={24} />
-          Iniciar Sesión
-        </Link>
-        <Link
-          to="/register"
-          className="bg-[#0a0a0a] border border-[#1f1f1f] text-gray-300 px-8 py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-3 transition-all hover:border-accent-electric/50 hover:text-accent-electric active:scale-95"
-        >
-          <UserPlus size={24} />
-          Solicitar Acceso
-        </Link>
+        {isInitialized === false ? (
+          <Link
+            to="/bootstrap"
+            className="bg-accent-electric text-black px-8 py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-3 transition-all shadow-lg shadow-accent-electric/20 hover:scale-105 active:scale-95"
+          >
+            <ShieldAlert size={24} />
+            Configurar Sistema (Bootstrap)
+          </Link>
+        ) : (
+          <>
+            <Link
+              to="/login"
+              className="bg-accent-electric text-black px-8 py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-3 transition-all shadow-lg shadow-accent-electric/20 hover:scale-105 active:scale-95"
+            >
+              <LogIn size={24} />
+              Iniciar Sesión
+            </Link>
+            <Link
+              to="/register"
+              className="bg-[#0a0a0a] border border-[#1f1f1f] text-gray-300 px-8 py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-3 transition-all hover:border-accent-electric/50 hover:text-accent-electric active:scale-95"
+            >
+              <UserPlus size={24} />
+              Solicitar Acceso
+            </Link>
+          </>
+        )}
       </div>
 
       <footer className="mt-20 text-gray-600 text-sm">

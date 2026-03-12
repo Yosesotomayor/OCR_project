@@ -1,24 +1,22 @@
-FROM python:3.11-slim-bookworm
-LABEL name="OCR Project - Backend"
+FROM python:3.11-slim
 
-
-RUN sed -i 's/http:/https:/g' /etc/apt/sources.list.d/debian.sources && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends \
-    libpq-dev gcc python3-dev \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-RUN pip install uv
+# Download uv from the Astral Sh project
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
 
-COPY backend/pyproject.toml backend/uv.lock ./
+# Install build deps for asyncpg / bcrypt native extensions
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN uv sync --frozen --no-cache --no-install-project
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project --no-dev
 
-COPY backend/src /app/src
+COPY . .
 
+RUN uv sync --frozen --no-dev
 
 EXPOSE 8000
 
-CMD ["uv", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

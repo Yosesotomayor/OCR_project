@@ -1,36 +1,29 @@
 import { useState, useEffect, useCallback } from 'react';
 import { cn } from '../utils';
-import { User, Shield, MoreVertical, Search, Key, ShieldAlert, Loader2, Plus, Edit, Trash2, X, Check } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth'; // Import useAuth to get the token
-
-const API_URL = import.meta.env.VITE_API_URL;
-
-interface IUser {
-  id: string;
-  email: string;
-  is_active: boolean;
-  is_admin: boolean;
-}
+import { User as UserIcon, Shield, Search, Key, ShieldAlert, Loader2, Plus, Edit, Trash2, X, Check } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
+import { getUsers, createUser, updateUser, deleteUser as sdkDeleteUser } from '../client/sdk.gen';
+import { type User, type UserRole, type UserStatus } from '../client/types.gen';
 
 interface UserFormData {
-  email: string;
-  password?: string; // Optional for editing
-  is_active: boolean;
-  is_admin: boolean;
+  username: string;
+  password?: string;
+  status: UserStatus;
+  role: UserRole;
 }
 
 export default function Admin() {
-  const { token } = useAuth(); // Get token from useAuth
-  const [users, setUsers] = useState<IUser[]>([]);
+  const { token } = useAuth();
+  const [users, setUsers] = useState<User[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showUserModal, setShowUserModal] = useState(false);
-  const [editingUser, setEditingUser] = useState<IUser | null>(null);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [userFormData, setUserFormData] = useState<UserFormData>({
-    email: '',
-    is_active: true,
-    is_admin: false,
+    username: '',
+    status: 'approved',
+    role: 'user',
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -39,29 +32,16 @@ export default function Admin() {
     setIsLoading(true);
     setError(null);
     try {
-      if (!token) {
-        throw new Error("No authentication token found.");
-      }
-      const response = await fetch(`${API_URL}/admin/users`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to fetch users');
-      }
-
-      const data: IUser[] = await response.json();
-      setUsers(data);
+      const { data, error: apiError } = await getUsers();
+      if (apiError) throw apiError;
+      if (data) setUsers(data);
     } catch (err: any) {
       console.error("Error fetching users:", err);
-      setError(err.message || 'Error al cargar usuarios.');
+      setError(err.detail || 'Error al cargar usuarios.');
     } finally {
       setIsLoading(false);
     }
-  }, [token]);
+  }, []);
 
   useEffect(() => {
     fetchUsers();
@@ -69,23 +49,24 @@ export default function Admin() {
 
   const handleAddUserClick = () => {
     setEditingUser(null);
-    setUserFormData({ email: '', password: '', is_active: true, is_admin: false });
+    setUserFormData({ username: '', password: '', status: 'approved', role: 'user' });
     setFormError(null);
     setShowUserModal(true);
   };
 
-  const handleEditUserClick = (user: IUser) => {
+  const handleEditUserClick = (user: User) => {
     setEditingUser(user);
-    setUserFormData({ email: user.email, is_active: user.is_active, is_admin: user.is_admin });
+    setUserFormData({ username: user.username, status: user.status, role: user.role });
     setFormError(null);
     setShowUserModal(true);
   };
 
-  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type, checked } = e.target;
+  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value, type } = e.target;
+    const val = type === 'checkbox' ? (e.target as HTMLInputElement).checked : value;
     setUserFormData(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value,
+      [name]: val,
     }));
   };
 
@@ -94,57 +75,34 @@ export default function Admin() {
     setFormError(null);
     setIsSubmitting(true);
 
-    if (!token) {
-      setFormError("No authentication token found.");
-      setIsSubmitting(false);
-      return;
-    }
-
     try {
-      let response;
       if (editingUser) {
-        // Update user
-        response = await fetch(`${API_URL}/admin/users/${editingUser.id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            email: userFormData.email,
-            is_active: userFormData.is_active,
-            is_admin: userFormData.is_admin,
-            // Password is not updated via PUT for security reasons,
-            // a separate "reset password" functionality would be needed.
-          }),
+        await updateUser({
+          path: { user_id: editingUser.id },
+          body: {
+            role: userFormData.role,
+            status: userFormData.status,
+          }
         });
       } else {
-        // Add user
         if (!userFormData.password) {
           setFormError("Password is required for new users.");
           setIsSubmitting(false);
           return;
         }
-        response = await fetch(`${API_URL}/admin/users`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify(userFormData),
+        await createUser({
+          body: {
+            username: userFormData.username,
+            password: userFormData.password,
+          }
         });
       }
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `Failed to ${editingUser ? 'update' : 'add'} user`);
-      }
-
       setShowUserModal(false);
-      fetchUsers(); // Refresh user list
+      fetchUsers();
     } catch (err: any) {
       console.error("Form submission error:", err);
-      setFormError(err.message || 'Error al guardar usuario.');
+      setFormError(err.detail || 'Error al guardar usuario.');
     } finally {
       setIsSubmitting(false);
     }
@@ -152,109 +110,58 @@ export default function Admin() {
 
   const handleDeleteUser = async (userId: string) => {
     if (!confirm('¿Estás seguro de que quieres eliminar este usuario?')) return;
-    setIsLoading(true); // Show loading for the whole table during deletion
+    setIsLoading(true);
     setError(null);
 
-    if (!token) {
-      setError("No authentication token found.");
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      const response = await fetch(`${API_URL}/admin/users/${userId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to delete user');
-      }
-
-      fetchUsers(); // Refresh user list
+      await sdkDeleteUser({ path: { user_id: userId } });
+      fetchUsers();
     } catch (err: any) {
       console.error("Error deleting user:", err);
-      setError(err.message || 'Error al eliminar usuario.');
+      setError(err.detail || 'Error al eliminar usuario.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const toggleUserStatus = async (user: IUser) => {
+  const toggleUserStatus = async (user: User) => {
     setIsLoading(true);
     setError(null);
-
-    if (!token) {
-      setError("No authentication token found.");
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      const response = await fetch(`${API_URL}/admin/users/${user.id}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ is_active: !user.is_active }),
+      await updateUser({
+        path: { user_id: user.id },
+        body: { status: user.status === 'approved' ? 'pending' : 'approved' }
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to toggle user status');
-      }
-
-      fetchUsers(); // Refresh user list
+      fetchUsers();
     } catch (err: any) {
       console.error("Error toggling user status:", err);
-      setError(err.message || 'Error al cambiar estado del usuario.');
+      setError(err.detail || 'Error al cambiar estado del usuario.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const toggleUserAdminStatus = async (user: IUser) => {
+  const toggleUserAdminStatus = async (user: User) => {
     setIsLoading(true);
     setError(null);
-
-    if (!token) {
-      setError("No authentication token found.");
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      const response = await fetch(`${API_URL}/admin/users/${user.id}/admin-status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ is_admin: !user.is_admin }),
+      await updateUser({
+        path: { user_id: user.id },
+        body: { role: user.role === 'admin' ? 'user' : 'admin' }
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to toggle admin status');
-      }
-
-      fetchUsers(); // Refresh user list
+      fetchUsers();
     } catch (err: any) {
       console.error("Error toggling admin status:", err);
-      setError(err.message || 'Error al cambiar rol de administrador.');
+      setError(err.detail || 'Error al cambiar rol de administrador.');
     } finally {
       setIsLoading(false);
     }
   };
 
   const filteredUsers = users.filter(u =>
-    u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (u.is_admin ? 'admin' : 'miembro').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (u.is_active ? 'activo' : 'inactivo').toLowerCase().includes(searchTerm.toLowerCase())
+    u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (u.role === 'admin' ? 'admin' : 'miembro').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (u.status === 'approved' ? 'activo' : 'inactivo').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -267,8 +174,14 @@ export default function Admin() {
         
         <div className="flex items-center gap-4">
           <div className="relative group">
-            <div className="absolute inset-0 bg-accent-electric/10 blur opacity-0 group-focus-within:opacity-100 transition-opacity rounded-xl" />
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-accent-electric transition-colors" size={16} />
+            <input 
+              type="text" 
+              placeholder="Buscar por usuario..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-sm focus:outline-none focus:border-accent-electric/50 transition-all w-64"
+            />
           </div>
           <button
             onClick={handleAddUserClick}
@@ -284,14 +197,14 @@ export default function Admin() {
         <table className="w-full text-left text-sm border-collapse">
           <thead>
             <tr className="border-b border-[#1f1f1f] bg-white/2 text-[10px] font-black uppercase tracking-widest text-gray-600">
-              <th className="p-6">Identidad / Email</th>
+              <th className="p-6">Identidad / Usuario</th>
               <th className="p-6">Nivel de Seguridad</th>
               <th className="p-6">Estado</th>
               <th className="p-6 text-right">Acciones</th>
             </tr>
           </thead>
           <tbody className="text-gray-300 divide-y divide-[#1f1f1f]">
-            {isLoading ? (
+            {isLoading && users.length === 0 ? (
               <tr>
                 <td colSpan={4} className="p-6 text-center text-gray-500">
                   <Loader2 className="animate-spin mx-auto mb-2" size={24} />
@@ -316,10 +229,10 @@ export default function Admin() {
                   <td className="p-6">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent-electric/20 to-indigo-900/20 border border-accent-electric/10 flex items-center justify-center text-accent-electric group-hover:scale-105 transition-transform shadow-lg">
-                        <User size={20} />
+                        <UserIcon size={20} />
                       </div>
                       <div>
-                        <span className="font-bold text-base block tracking-tight">{u.email}</span>
+                        <span className="font-bold text-base block tracking-tight">{u.username}</span>
                         <span className="text-[10px] text-gray-600 italic font-mono">{u.id.split('-')[0]}</span>
                       </div>
                     </div>
@@ -327,19 +240,19 @@ export default function Admin() {
                   <td className="p-6">
                     <div className={cn(
                       "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest w-fit border shadow-sm",
-                      u.is_admin ? "bg-accent-electric/10 text-accent-electric border-accent-electric/20" : "bg-white/5 text-gray-500 border-white/10"
+                      u.role === 'admin' ? "bg-accent-electric/10 text-accent-electric border-accent-electric/20" : "bg-white/5 text-gray-500 border-white/10"
                     )}>
-                      {u.is_admin ? <ShieldAlert size={12} /> : <Key size={12} />}
-                      {u.is_admin ? 'Admin' : 'Miembro'}
+                      {u.role === 'admin' ? <ShieldAlert size={12} /> : <Key size={12} />}
+                      {u.role === 'admin' ? 'Admin' : 'Miembro'}
                     </div>
                   </td>
                   <td className="p-6">
                     <div className={cn(
                       "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest w-fit border shadow-sm",
-                      u.is_active ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-orange-500/10 text-orange-500 border-orange-500/20 animate-pulse"
+                      u.status === 'approved' ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-orange-500/10 text-orange-500 border-orange-500/20 animate-pulse"
                     )}>
-                      {u.is_active ? <Check size={12} /> : <Shield size={12} />}
-                      {u.is_active ? 'Activo' : 'Pendiente de Aprobación'}
+                      {u.status === 'approved' ? <Check size={12} /> : <Shield size={12} />}
+                      {u.status === 'approved' ? 'Activo' : 'Pendiente'}
                     </div>
                   </td>
                   <td className="p-6 text-right">
@@ -348,19 +261,19 @@ export default function Admin() {
                         onClick={() => toggleUserStatus(u)}
                         className={cn(
                           "p-2 rounded-full transition-colors",
-                          u.is_active ? "text-emerald-500 hover:bg-emerald-500/20" : "text-red-500 hover:bg-red-500/20"
+                          u.status === 'approved' ? "text-emerald-500 hover:bg-emerald-500/20" : "text-red-500 hover:bg-red-500/20"
                         )}
-                        title={u.is_active ? "Desactivar Usuario" : "Activar Usuario"}
+                        title={u.status === 'approved' ? "Desactivar Usuario" : "Activar Usuario"}
                       >
-                        {u.is_active ? <Check size={18} /> : <X size={18} />}
+                        {u.status === 'approved' ? <Check size={18} /> : <X size={18} />}
                       </button>
                       <button
                         onClick={() => toggleUserAdminStatus(u)}
                         className={cn(
                           "p-2 rounded-full transition-colors",
-                          u.is_admin ? "text-accent-electric hover:bg-accent-electric/20" : "text-gray-500 hover:bg-white/20"
+                          u.role === 'admin' ? "text-accent-electric hover:bg-accent-electric/20" : "text-gray-500 hover:bg-white/20"
                         )}
-                        title={u.is_admin ? "Quitar Rol Admin" : "Dar Rol Admin"}
+                        title={u.role === 'admin' ? "Quitar Rol Admin" : "Dar Rol Admin"}
                       >
                         <ShieldAlert size={18} />
                       </button>
@@ -411,18 +324,19 @@ export default function Admin() {
             )}
             <form onSubmit={handleSubmitUser} className="space-y-5">
               <div>
-                <label htmlFor="email" className="block text-gray-400 text-sm font-medium mb-2">Email</label>
+                <label htmlFor="username" className="block text-gray-400 text-sm font-medium mb-2">Usuario</label>
                 <input
-                  type="email"
-                  id="email"
-                  name="email"
-                  value={userFormData.email}
+                  type="text"
+                  id="username"
+                  name="username"
+                  value={userFormData.username}
                   onChange={handleFormChange}
                   className="w-full bg-[#1f1f1f] border border-[#2f2f2f] rounded-lg px-4 py-3 text-white focus:outline-none focus:border-accent-electric/50"
                   required
+                  disabled={!!editingUser}
                 />
               </div>
-              {!editingUser && ( // Password only for new users
+              {!editingUser && (
                 <div>
                   <label htmlFor="password" className="block text-gray-400 text-sm font-medium mb-2">Contraseña</label>
                   <input
@@ -436,28 +350,36 @@ export default function Admin() {
                   />
                 </div>
               )}
-              <div className="flex items-center justify-between">
-                <label htmlFor="is_active" className="text-gray-400 text-sm font-medium">Activo</label>
-                <input
-                  type="checkbox"
-                  id="is_active"
-                  name="is_active"
-                  checked={userFormData.is_active}
-                  onChange={handleFormChange}
-                  className="h-5 w-5 text-accent-electric rounded border-gray-600 focus:ring-accent-electric"
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <label htmlFor="is_admin" className="text-gray-400 text-sm font-medium">Administrador</label>
-                <input
-                  type="checkbox"
-                  id="is_admin"
-                  name="is_admin"
-                  checked={userFormData.is_admin}
-                  onChange={handleFormChange}
-                  className="h-5 w-5 text-accent-electric rounded border-gray-600 focus:ring-accent-electric"
-                />
-              </div>
+              {editingUser && (
+                <>
+                  <div>
+                    <label htmlFor="status" className="block text-gray-400 text-sm font-medium mb-2">Estado</label>
+                    <select
+                      id="status"
+                      name="status"
+                      value={userFormData.status}
+                      onChange={handleFormChange as any}
+                      className="w-full bg-[#1f1f1f] border border-[#2f2f2f] rounded-lg px-4 py-3 text-white focus:outline-none focus:border-accent-electric/50"
+                    >
+                      <option value="approved">Aprobado</option>
+                      <option value="pending">Pendiente</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="role" className="block text-gray-400 text-sm font-medium mb-2">Rol</label>
+                    <select
+                      id="role"
+                      name="role"
+                      value={userFormData.role}
+                      onChange={handleFormChange as any}
+                      className="w-full bg-[#1f1f1f] border border-[#2f2f2f] rounded-lg px-4 py-3 text-white focus:outline-none focus:border-accent-electric/50"
+                    >
+                      <option value="user">Usuario</option>
+                      <option value="admin">Administrador</option>
+                    </select>
+                  </div>
+                </>
+              )}
               <div className="flex justify-end gap-4 mt-6">
                 <button
                   type="button"

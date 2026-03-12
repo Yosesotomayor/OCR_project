@@ -5,19 +5,11 @@ import ChatContainer from '../components/ChatContainer';
 import { useAuth } from '../hooks/useAuth';
 import { useChat } from '../ChatContext';
 import { motion } from 'framer-motion';
-
-const API_URL = import.meta.env.VITE_API_URL;
-
-interface IChatSession {
-  id: string;
-  title: string;
-  created_at: string;
-}
+import { listChats, deleteChat as sdkDeleteChat } from '../client/sdk.gen';
+import { type ChatRead } from '../client/types.gen';
 
 export default function Chat() {
-  const [sessions, setSessions] = useState<IChatSession[]>([]);
-  const [editingChatId, setEditingChatId] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState('');
+  const [sessions, setSessions] = useState<ChatRead[]>([]);
   
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     const saved = localStorage.getItem('chat_sidebar_open');
@@ -36,36 +28,21 @@ export default function Chat() {
 
   const fetchSessions = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/chats`, { headers: { 'Authorization': `Bearer ${token}` } });
-      if (res.ok) {
-        const data = await res.json();
+      const { data } = await listChats();
+      if (data) {
         setSessions(data);
       }
     } catch (err) { console.error(err); }
-  }, [token]);
+  }, []);
 
-  const handleRename = async (id: string) => {
-    if (!editTitle.trim()) return setEditingChatId(null);
-    try {
-      await fetch(`${API_URL}/chats/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ title: editTitle })
-      });
-      setEditingChatId(null);
-      fetchSessions();
-    } catch (err) { console.error(err); }
-  };
-
-  const deleteChat = async (id: string, e: React.MouseEvent) => {
+  const handleDeleteChat = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm("¿Borrar chat?")) {
-      await fetch(`${API_URL}/chats/${id}`, { 
-        method: 'DELETE', 
-        headers: { 'Authorization': `Bearer ${token}` } 
-      });
-      if (activeChatId === id) startNewChat();
-      fetchSessions();
+      try {
+        await sdkDeleteChat({ path: { chat_id: id } });
+        if (activeChatId === id) startNewChat();
+        fetchSessions();
+      } catch (err) { console.error(err); }
     }
   };
 
@@ -73,7 +50,6 @@ export default function Chat() {
     if (token) fetchSessions(); 
   }, [token, fetchSessions]);
 
-  // Restaurar chat guardado al inicio
   useEffect(() => {
     const savedId = localStorage.getItem('last_active_chat_id');
     if (savedId && sessions.length > 0 && messages.length === 0 && !activeChatId) {
@@ -129,29 +105,11 @@ export default function Chat() {
             >
               <div className="flex items-center gap-3 truncate flex-1">
                 <MessageSquare size={16} className={activeChatId === s.id ? "text-accent-electric" : "text-gray-600"} />
-                {editingChatId === s.id ? (
-                  <input 
-                    autoFocus
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    onBlur={() => handleRename(s.id)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleRename(s.id)}
-                    className="bg-black/40 border border-accent-electric/30 rounded px-2 py-1 text-xs w-full outline-none"
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                ) : (
-                  <span className="text-xs font-medium truncate">{s.title}</span>
-                )}
+                <span className="text-xs font-medium truncate">{s.title}</span>
               </div>
               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button 
-                  onClick={(e) => { e.stopPropagation(); setEditingChatId(s.id); setEditTitle(s.title); }}
-                  className="p-1 hover:text-accent-electric transition-colors"
-                >
-                  <Plus size={14} className="rotate-45" />
-                </button>
-                <button 
-                  onClick={(e) => deleteChat(s.id, e)}
+                  onClick={(e) => handleDeleteChat(s.id, e)}
                   className="p-1 hover:text-red-500 transition-colors"
                 >
                   <Trash2 size={14} />

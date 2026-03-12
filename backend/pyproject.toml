@@ -1,26 +1,22 @@
 [project]
-name = "backend"
+name = "leaselens-backend"
 version = "0.1.0"
-description = "OCR Backend"
-readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.110.0",
-    "uvicorn>=0.27.0",
-    "psycopg2-binary>=2.9.9",
-    "sqlalchemy>=2.0.27",
-    "python-multipart>=0.0.9",
-    "langchain-community>=0.4.1",
-    "langchain-ollama>=1.0.1",
-    "chromadb>=1.5.1",
-    "pypdf>=6.7.3",
-    "httpx>=0.28.1",
-    "boto3>=1.42.58",
-    "passlib[bcrypt]>=1.7.4",
-    "python-jose[cryptography]>=3.3.0",
-    "email-validator>=2.1.1",
-    "bcrypt==4.0.1",
-    "ruff>=0.1.0",
-    "stripe>=8.0.0", # Added for Stripe integration
+    "uvicorn[standard]",
+    "httpx",
+    "fastapi",
+    "sqlalchemy",
+    "minio",
+    "pydantic-settings",
+    "asyncpg",
+    "python-jose[cryptography]",
+    "pillow",
+    "pgvector",
+    "passlib[bcrypt]",
+    "bcrypt==4.3.0",
+    "PyMuPDF",
+    "opencv-python-headless",
+    "python-multipart",
+    "greenlet",
 ]
-

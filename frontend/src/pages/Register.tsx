@@ -1,41 +1,26 @@
 import { useState } from 'react';
 import AuthLayout from '../layouts/AuthLayout';
-import { ShieldCheck, AlertCircle, Eye, EyeOff } from 'lucide-react'; // Import Eye and EyeOff
+import { ShieldCheck, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../utils';
-
-const API_URL = import.meta.env.VITE_API_URL;
+import { createUser } from '../client/sdk.gen';
 
 export default function Register() {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [emailError, setEmailError] = useState('');
+  const [usernameError, setUsernameError] = useState('');
   const [registerError, setRegisterError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false); // New state for password visibility
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
-
-  const validateEmail = (inputEmail: string) => {
-    if (!inputEmail.endsWith('@vertiche.mx')) {
-      setEmailError('El correo debe ser de dominio @vertiche.mx');
-      return false;
-    }
-    setEmailError('');
-    return true;
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegisterError('');
-    setEmailError('');
+    setUsernameError('');
 
-    if (!validateEmail(email)) {
-      return;
-    }
-
-    if (!name.trim()) {
-      setRegisterError('Por favor, ingresa tu nombre.');
+    if (!username.trim()) {
+      setUsernameError('El nombre de usuario es obligatorio.');
       return;
     }
 
@@ -46,23 +31,19 @@ export default function Register() {
 
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
+      const { data, error } = await createUser({
+        body: { username, password }
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        setRegisterError(errorData.detail || 'Error al solicitar acceso');
+      if (error) {
+        setRegisterError((error as any).detail || 'Error al solicitar acceso');
         return;
       }
 
-      // Registration successful, redirect to login
-      alert('Solicitud de acceso enviada. Ahora puedes iniciar sesión.');
-      navigate('/login');
+      if (data) {
+        alert('Solicitud de acceso enviada. Ahora puedes iniciar sesión.');
+        navigate('/login');
+      }
 
     } catch (error) {
       console.error('Error de red o servidor:', error);
@@ -85,51 +66,36 @@ export default function Register() {
 
       <form className="space-y-6" onSubmit={handleSubmit}>
         <div className="space-y-2">
-          <label className="text-[10px] font-black text-gray-600 uppercase tracking-widest ml-1">Nombre del Operador</label>
+          <label className="text-[10px] font-black text-gray-600 uppercase tracking-widest ml-1">Nombre de Usuario</label>
           <input 
             type="text" 
-            placeholder="NOMBRE COMPLETO"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-5 py-4 text-white focus:outline-none focus:border-accent-electric/50 focus:ring-1 focus:ring-accent-electric/20 transition-all placeholder:text-gray-800 text-sm font-bold tracking-tight uppercase"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-[10px] font-black text-gray-600 uppercase tracking-widest ml-1">Email Corporativo</label>
-          <input 
-            type="email" 
-            placeholder="EMAIL@VERTICHE.MX" // Updated placeholder
-            value={email}
-            onChange={(e) => {
-              setEmail(e.target.value);
-              validateEmail(e.target.value);
-            }}
-            onBlur={(e) => validateEmail(e.target.value)}
+            placeholder="USUARIO_ID"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
             className={cn(
               "w-full bg-[#0a0a0a] border rounded-xl px-5 py-4 text-white focus:outline-none focus:border-accent-electric/50 focus:ring-1 focus:ring-accent-electric/20 transition-all placeholder:text-gray-800 text-sm font-bold tracking-tight uppercase",
-              emailError ? "border-red-500" : "border-[#1f1f1f]"
+              usernameError ? "border-red-500" : "border-[#1f1f1f]"
             )}
           />
-          {emailError && (
+          {usernameError && (
             <p className="text-red-500 text-xs flex items-center gap-1 ml-1">
-              <AlertCircle size={12} /> {emailError}
+              <AlertCircle size={12} /> {usernameError}
             </p>
           )}
         </div>
 
         <div className="space-y-2">
-          <label className="text-[10px] font-black text-gray-600 uppercase tracking-widest ml-1">Código de Acceso</label>
-          <div className="relative"> {/* Added relative div for positioning */}
+          <label className="text-[10px] font-black text-gray-600 uppercase tracking-widest ml-1">Contraseña</label>
+          <div className="relative">
             <input 
-              type={showPassword ? 'text' : 'password'} // Toggle type
+              type={showPassword ? 'text' : 'password'}
               placeholder="••••••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-5 py-4 text-white focus:outline-none focus:border-accent-electric/50 focus:ring-1 focus:ring-accent-electric/20 transition-all placeholder:text-gray-800 text-sm pr-12" // Added pr-12 for button space
+              className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl px-5 py-4 text-white focus:outline-none focus:border-accent-electric/50 focus:ring-1 focus:ring-accent-electric/20 transition-all placeholder:text-gray-800 text-sm pr-12"
             />
             <button
-              type="button" // Important: prevent form submission
+              type="button"
               onClick={() => setShowPassword(!showPassword)}
               className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-white transition-colors"
             >
@@ -148,7 +114,7 @@ export default function Register() {
           type="submit"
           disabled={isLoading}
           className={cn(
-            "w-full bg-accent-electric hover:bg-accent-electric-hover text-black font-black py-5 rounded-xl mt-6 transition-all shadow-[0_0_30px_rgba(168,85,247,0.2)] active:scale-[0.98] uppercase tracking-[0.2em] text-xs",
+            "w-full bg-accent-electric hover:bg-accent-electric/90 text-black font-black py-5 rounded-xl mt-6 transition-all shadow-[0_0_30px_rgba(0,240,255,0.2)] active:scale-[0.98] uppercase tracking-[0.2em] text-xs",
             isLoading && "opacity-50 cursor-not-allowed"
           )}
         >

@@ -1,5 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 @theme {
   --color-accent-electric: #00F0FF;
@@ -28,4 +29,21 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
   ::-webkit-scrollbar-thumb:hover { background: rgba(0, 240, 255, 0.3); }
+
+  .prose-custom {
+    --tw-prose-body: theme('colors.gray.200');
+    --tw-prose-headings: theme('colors.white');
+    --tw-prose-links: theme('colors.accent-electric');
+    --tw-prose-bold: theme('colors.white');
+    --tw-prose-counters: theme('colors.accent-electric');
+    --tw-prose-bullets: theme('colors.accent-electric');
+    --tw-prose-quotes: theme('colors.accent-electric');
+    --tw-prose-quote-borders: theme('colors.accent-electric');
+    --tw-prose-captions: theme('colors.gray.400');
+    --tw-prose-code: theme('colors.accent-electric');
+    --tw-prose-pre-code: theme('colors.gray.200');
+    --tw-prose-pre-bg: theme('colors.white / 0.05');
+    --tw-prose-th-borders: theme('colors.white / 0.1');
+    --tw-prose-td-borders: theme('colors.white / 0.05');
+  }
 }
