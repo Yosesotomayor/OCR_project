@@ -2,6 +2,7 @@ import uuid
 import hashlib
 import time
 import logging
+from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from app.models.lease import Lease, LeaseStatus
 from app.schemas.lease import LeaseBase
@@ -83,10 +84,14 @@ class IngestionService:
 
         structured = await self.extraction_service.extract_structured(raw_text)
 
-        validated = LeaseBase(
-            filename=lease.filename,
-            **structured,
-        ).model_dump(exclude_unset=True)
+        validated = dict()
+        for field, value in structured.items():
+            try:
+                partial = LeaseBase(filename=lease.filename, **{field: value})
+                validated[field] = getattr(partial, field)
+            except ValidationError:
+                logger.warning(f"Invalid field {field}={value}, skipping")
+
         await self.lease_repo.update(lease, **validated)
 
     async def _run_embedding(self, lease: Lease, raw_text: str) -> None:
