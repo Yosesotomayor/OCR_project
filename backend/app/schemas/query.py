@@ -20,11 +20,6 @@ class QueryFilters(BaseModel):
     expires_after: Optional[datetime] = None
 
 
-class QueryIntent(BaseModel):
-    filters: QueryFilters
-    search_query: str
-
-
 class ChunkSource(BaseModel):
     chunk_id: str
     lease_id: str

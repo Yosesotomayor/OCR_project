@@ -1,105 +1,92 @@
-INTENT_PROMPT = """
-Eres un sistema de extracción de intención para búsquedas de contratos de arrendamiento en México.
+ORCHESTRATOR_PROMPT = """
+Eres un asistente que analiza preguntas sobre contratos de arrendamiento en México.
 
-TAREA
-Analiza la pregunta del usuario y extrae:
-1) filtros estructurados
-2) una consulta de búsqueda optimizada para reranking (una frase natural que combine intención y términos legales relevantes)
+Debes decidir si la pregunta del usuario requiere aplicar filtros para buscar contratos en una base de datos.
+
+Filtros posibles:
+- arrendatario
+- arrendador
+- sucursal
+- estado
+- municipio
+- min_superficie_m2
+- max_superficie_m2
+- min_renta_mensual
+- max_renta_mensual
+- tipo_moneda
+- starts_before
+- starts_after
+- expires_before
+- expires_after
+
+Regla:
+Si la pregunta menciona alguna restricción, condición o característica que limite los contratos a buscar, responde: SI
+Si la pregunta es general y no limita la búsqueda, responde: NO
+
+Pregunta:
+{query}
+
+Respuesta (solo SI o NO):
+"""
+
+FILTER_EXTRACTION_PROMPT = """
+Extrae filtros estructurados de una pregunta sobre contratos de arrendamiento en México.
 
 REGLAS
-- Responde únicamente con JSON válido.
-- No incluyas explicaciones ni markdown.
+- Responde solo con JSON válido.
+- No expliques nada.
 - Si un valor no aparece en la pregunta usa null.
-- Los valores numéricos deben ser números, no strings.
-- Las fechas deben estar en formato YYYY-MM-DD si es posible.
-- Si el usuario menciona una ciudad conocida en México, puedes inferir el estado si es claro.
-- Si el usuario menciona una localidad ambigua (por ejemplo "Vallarta") y no es claro si es colonia, calle o municipio, coloca ese mismo valor en:
-  estado, municipio y sucursal.
+- Los números deben ser números.
+- Fechas en formato YYYY-MM-DD si es posible.
 - No inventes información.
-- La consulta de búsqueda debe ser corta, natural y contener términos relevantes para la pregunta. No debe ser una respuesta, ni un resumen, ni solo palabras clave.
+
+Regla de localidad ambigua:
+Si el usuario menciona un lugar ambiguo (ej: "Vallarta") y no es claro si es colonia, municipio o sucursal,
+usa ese mismo valor en: estado, municipio y sucursal.
 
 ESQUEMA
 
 {{
-  "filters": {{
-    "arrendatario": string | null,
-    "arrendador": string | null,
-    "sucursal": string | null,
-    "estado": string | null,
-    "municipio": string | null,
-    "min_superficie_m2": number | null,
-    "max_superficie_m2": number | null,
-    "min_renta_mensual": number | null,
-    "max_renta_mensual": number | null,
-    "tipo_moneda": string | null,
-    "starts_before": string | null,
-    "starts_after": string | null,
-    "expires_before": string | null,
-    "expires_after": string | null
-  }},
-  "search_query": string
+  "arrendatario": string | null,
+  "arrendador": string | null,
+  "sucursal": string | null,
+  "estado": string | null,
+  "municipio": string | null,
+  "min_superficie_m2": number | null,
+  "max_superficie_m2": number | null,
+  "min_renta_mensual": number | null,
+  "max_renta_mensual": number | null,
+  "tipo_moneda": string | null,
+  "starts_before": string | null,
+  "starts_after": string | null,
+  "expires_before": string | null,
+  "expires_after": string | null
 }}
-
-EJEMPLO 1
 
 Pregunta:
-"contratos en Guadalajara con renta menor a 50 mil pesos"
-
-Salida:
-
-{{
-  "filters": {{
-    "arrendatario": null,
-    "arrendador": null,
-    "sucursal": null,
-    "estado": "Jalisco",
-    "municipio": "Guadalajara",
-    "min_superficie_m2": null,
-    "max_superficie_m2": null,
-    "min_renta_mensual": null,
-    "max_renta_mensual": 50000,
-    "tipo_moneda": "MXN",
-    "starts_before": null,
-    "starts_after": null,
-    "expires_before": null,
-    "expires_after": null
-  }},
-  "search_query": "contratos de arrendamiento en Guadalajara con renta menor a 50 mil pesos"
-}}
-
-EJEMPLO 2 (localidad ambigua)
-
-Pregunta:
-"intereses moratorios del contrato de Vallarta"
-
-Salida:
-
-{{
-  "filters": {{
-    "arrendatario": null,
-    "arrendador": null,
-    "sucursal": "Vallarta",
-    "estado": "Vallarta",
-    "municipio": "Vallarta",
-    "min_superficie_m2": null,
-    "max_superficie_m2": null,
-    "min_renta_mensual": null,
-    "max_renta_mensual": null,
-    "tipo_moneda": null,
-    "starts_before": null,
-    "starts_after": null,
-    "expires_before": null,
-    "expires_after": null
-  }},
-  "search_query": "intereses moratorios en contratos de arrendamiento de Vallarta"
-}}
-
-PREGUNTA
-<<<
 {query}
->>>
 
 JSON:
+"""
+
+SEARCH_QUERY_PROMPT = """
+Convierte la pregunta del usuario en una consulta de búsqueda para encontrar cláusulas en contratos de arrendamiento.
+
+REGLAS
+- Responde solo con una frase.
+- No expliques nada.
+- Debe ser corta y natural.
+- Incluye términos legales relevantes si aparecen.
+- No respondas la pregunta.
+
+Ejemplo:
+Pregunta: intereses moratorios del contrato de Vallarta
+Consulta: intereses moratorios en contratos de arrendamiento de Vallarta
+
+Pregunta:
+{query}
+
+Consulta:
 """
 
 RAG_PROMPT = """

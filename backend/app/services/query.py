@@ -7,8 +7,13 @@ from app.models.lease import Chunk
 from app.repositories.chunk_repo import ChunkRepo
 from app.repositories.lease_repo import LeaseRepo
 from app.infrastructure.ml import LLM, EmbeddingModel, Reranker
-from app.schemas.query import ChunkSource, QueryIntent, QueryFilters
-from app.prompts.query import INTENT_PROMPT, RAG_PROMPT
+from app.schemas.query import ChunkSource, QueryFilters
+from app.prompts.query import (
+    ORCHESTRATOR_PROMPT, 
+    FILTER_EXTRACTION_PROMPT, 
+    SEARCH_QUERY_PROMPT, 
+    RAG_PROMPT
+)
 
 from app.utils.utils import parse_json
 from app.repositories.chat_repo import MessageRepo
@@ -39,20 +44,24 @@ class QueryService:
             normalize_embeddings=True,
         )
 
-    async def _extract_intent(self, query: str) -> QueryIntent:
-        prompt = INTENT_PROMPT.format(query=query)
+    async def _determine_if_filters_are_needed(self, query: str) -> bool:
+        prompt = ORCHESTRATOR_PROMPT.format(query=query)
+        response = await self.llm.generate(prompt, temperature=0.0)
+        return "SI" in response.strip().upper()
+
+    async def _extract_filters(self, query: str) -> QueryFilters | None:
+        prompt = FILTER_EXTRACTION_PROMPT.format(query=query)
         response = await self.llm.generate(prompt, temperature=0.0)
         try:
             data = parse_json(response)
-            return QueryIntent(**data)
+            return QueryFilters(**data)
         except Exception as e:
-            logger.error(f"Error extracting intent: {e}. Raw response: {response}")
-        
-        # Fallback to default intent
-        return QueryIntent(
-            filters=QueryFilters(),
-            search_query=query
-        )
+            logger.error(f"Error extracting filters: {e}. Raw response: {response}")
+    
+    async def _extract_search_query(self, query: str) -> str:
+        prompt = SEARCH_QUERY_PROMPT.format(query=query)
+        response = await self.llm.generate(prompt, temperature=0.0)
+        return response.strip()
 
     def _rerank(self, query: str, chunks: list[Chunk]) -> list[Chunk]:
         if not self._reranker or not chunks:
@@ -105,26 +114,39 @@ class QueryService:
                 content=query
             )
 
-        # Step 1: Extract Intent
-        intent = await self._extract_intent(query)
-        logger.info(f"Extracted intent: {intent}")
+        # Step 1: Determine if filters are needed
+        filters_needed = await self._determine_if_filters_are_needed(query)
+        logger.info(f"Filters needed: {filters_needed}")
 
-        # Step 2: Embed semantic query
-        query_embedding = self._embed_query(intent.search_query)
+        # Step 2: Extract filters if needed
+        filters = None
+        if filters_needed:
+            filters = await self._extract_filters(query)
+            logger.info(f"Extracted filters: {filters}")
+
+        # Step 3: Extract search query
+        search_query = await self._extract_search_query(query)
+        logger.info(f"Extracted search query: {search_query}")
+
+        # Step 4: Embed semantic query
+        query_embedding = self._embed_query(search_query)
         
         # Step 3: Search with filters
         chunks = await self.chunk_repo.search(
             query_embedding, 
             limit=settings.retrieval_top_k,
             filenames=lease_filenames,
-            filters=intent.filters
+            filters=filters
         )
         
         logger.info(f"Found {len(chunks)} chunks")
 
         # Step 4: Fallback if no results found with filters
-        applied_filters = any(v is not None for v in intent.filters.model_dump().values())
-        if applied_filters and not chunks:
+        if (
+            filters is not None and
+            any(v is not None for v in filters.model_dump().values()) and
+            not chunks
+        ):
             logger.warning("No results with filters, falling back to unfiltered search")
             chunks = await self.chunk_repo.search(
                 query_embedding,
@@ -133,7 +155,7 @@ class QueryService:
                 filters=None
             )
 
-        chunks = self._rerank(intent.search_query, list(chunks))
+        chunks = self._rerank(search_query, list(chunks))
         sources = await self._build_sources(chunks)
         logger.info("Reranked chunks")
 
