@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../hooks/useAuth';
-import { listLeases, uploadLease, deleteLease, getLease, getLeaseUrl } from '../client/sdk.gen';
+import { listLeases, uploadLease, deleteLease, getLeaseUrl, getLeaseProgress } from '../client/sdk.gen';
 import { type LeaseOut } from '../client/types.gen';
 import { toast } from 'sonner';
 
@@ -18,8 +18,10 @@ const StatusBadge = memo(({ status, contractId, onFinished }: { status: string, 
     if (currentStatus !== 'processing' && currentStatus !== 'uploaded') return;
     const interval = setInterval(async () => {
       try {
-        const { data } = await getLease({ path: { lease_id: contractId } });
+        const { data } = await getLeaseProgress({ path: { lease_id: contractId } });
         if (data) {
+          setProgress(data.progress);
+          
           if (data.status !== 'processing' && data.status !== 'uploaded') { 
             setCurrentStatus(data.status); 
             clearInterval(interval); 
@@ -88,12 +90,21 @@ export default function Documents() {
     if (fileArray.length === 0) return;
     setIsUploading(true);
     for (const file of fileArray) {
-      const { error } = await uploadLease({ body: { file } });
+      const { data, error } = await uploadLease({ body: { file } });
+      if (data) {
+        setContracts(prev => [
+          {
+            ...data,
+            status: "uploaded"
+          },
+          ...prev
+        ]);
+      }
       if (error) {
         toast.error(error.detail);
       }
     }
-    fetchContracts(); 
+    await fetchContracts(); 
     setIsUploading(false);
   };
 
@@ -129,17 +140,6 @@ export default function Documents() {
     setSortConfig(prev => ({ key, dir: prev.key === key && prev.dir === 'asc' ? 'desc' : 'asc' }));
   };
 
-  const sortedContracts = useMemo(() => {
-    const filtered = contracts.filter(c => (c.arrendatario?.toLowerCase() || c.filename.toLowerCase()).includes(searchTerm.toLowerCase()));
-    return [...filtered].sort((a, b) => {
-      const valA = (a[sortConfig.key] as string) || '';
-      const valB = (b[sortConfig.key] as string) || '';
-      if (valA < valB) return sortConfig.dir === 'asc' ? -1 : 1;
-      if (valA > valB) return sortConfig.dir === 'asc' ? 1 : -1;
-      return 0;
-    });
-  }, [contracts, searchTerm, sortConfig]);
-
   return (
     <div className="p-10 h-full flex flex-col font-sans bg-[#050505] text-white overflow-hidden">
       <header className="mb-10 flex justify-between items-end shrink-0">
@@ -158,7 +158,7 @@ export default function Documents() {
           <table className="w-full text-left text-[10px]">
             <thead className="sticky top-0 bg-[#0d0d0d] text-gray-500 font-black uppercase tracking-widest border-b border-white/5 z-10">
               <tr>
-                <th className="px-6 py-4 w-10"><input type="checkbox" checked={selectedIds.length === sortedContracts.length} onChange={(e) => setSelectedIds(e.target.checked ? sortedContracts.map(c => c.id) : [])} className="accent-accent-electric"/></th>
+                <th className="px-6 py-4 w-10"><input type="checkbox" checked={selectedIds.length === contracts.length} onChange={(e) => setSelectedIds(e.target.checked ? contracts.map(c => c.id) : [])} className="accent-accent-electric"/></th>
                 <th className="px-6 py-4 cursor-pointer hover:text-accent-electric transition-colors" onClick={() => toggleSort('arrendatario')}>Arrendatario <ArrowUpDown size={10} className="inline ml-1"/></th>
                 <th className="px-6 py-4 cursor-pointer hover:text-accent-electric transition-colors" onClick={() => toggleSort('renta_mensual')}>Renta <ArrowUpDown size={10} className="inline ml-1"/></th>
                 <th className="px-6 py-4 cursor-pointer hover:text-accent-electric transition-colors" onClick={() => toggleSort('fecha_inicio')}>Inicio <ArrowUpDown size={10} className="inline ml-1"/></th>
@@ -168,7 +168,7 @@ export default function Documents() {
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {sortedContracts.map((c) => (
+              {contracts.map((c) => (
                 <tr key={c.id} className="hover:bg-white/[0.02] transition-colors group text-gray-300">
                   <td className="px-6 py-5 text-center"><input type="checkbox" checked={selectedIds.includes(c.id)} onChange={(e) => setSelectedIds(e.target.checked ? [...selectedIds, c.id] : selectedIds.filter(id => id !== c.id))} className="accent-accent-electric"/></td>
                   <td className="px-6 py-5"><p className="font-bold text-white text-xs">{c.arrendatario || c.filename}</p><p className="text-[8px] text-gray-600 uppercase tracking-tighter">{c.estado || 'S/I'}</p></td>

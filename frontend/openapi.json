@@ -528,6 +528,54 @@
         }
       }
     },
+    "/leases/{lease_id}/progress": {
+      "get": {
+        "tags": [
+          "leases"
+        ],
+        "summary": "Get Lease Progress",
+        "operationId": "get_lease_progress",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "lease_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Lease Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaseProgressOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/leases/{lease_id}/url": {
       "get": {
         "tags": [
@@ -1332,6 +1380,23 @@
           "created_at"
         ],
         "title": "LeaseOut"
+      },
+      "LeaseProgressOut": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/LeaseStatus"
+          },
+          "progress": {
+            "type": "integer",
+            "title": "Progress"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "progress"
+        ],
+        "title": "LeaseProgressOut"
       },
       "LeaseStatus": {
         "type": "string",

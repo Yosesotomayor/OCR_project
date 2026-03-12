@@ -46,3 +46,8 @@ class LeaseOut(LeaseBase):
 class LeaseList(BaseModel):
     total: int
     items: list[LeaseOut]
+
+
+class LeaseProgressOut(BaseModel):
+    status: LeaseStatus
+    progress: int

@@ -28,6 +28,7 @@ class Lease(Base):
     status = Column(Enum(LeaseStatus), nullable=False, default=LeaseStatus.UPLOADED)
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    progress = Column(Integer, nullable=False, default=0)
 
     # Parties
     arrendatario = Column(String, nullable=True)

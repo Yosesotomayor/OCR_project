@@ -95,16 +95,21 @@ class IngestionService:
 
     async def _process_pipeline(self, lease: Lease, skip_ocr: bool = False) -> None:
         await self._update_status(lease, LeaseStatus.PROCESSING)
+        await self.lease_repo.update(lease, progress=20)
 
         raw_text = lease.raw_text
         if not raw_text and not skip_ocr:
             raw_text = await self._run_ocr(lease)
 
+        await self.lease_repo.update(lease, progress=40)
         await self._run_structured_extraction(lease, raw_text)
+        
+        await self.lease_repo.update(lease, progress=80)
         await self._run_embedding(lease, raw_text)
 
         logger.info(f"Processing lease {lease.id} - Marking ready")
         await self._update_status(lease, LeaseStatus.READY)
+        await self.lease_repo.update(lease, progress=100)
 
     async def process(self, lease_id: uuid.UUID) -> None:
         lease = await self.lease_repo.get(lease_id)

@@ -17,7 +17,7 @@ from app.api.deps import (
     get_current_admin_user
 )
 from app.schemas.user import User
-from app.schemas.lease import LeaseOut, LeaseList
+from app.schemas.lease import LeaseOut, LeaseList, LeaseProgressOut
 from app.services.ingestion import IngestionService
 from app.repositories.lease_repo import LeaseRepo
 from app.repositories.chunk_repo import ChunkRepo
@@ -80,6 +80,17 @@ async def list_leases(repo: LeaseRepo = Depends(get_lease_repo)):
 
 @router.get("/{lease_id}", response_model=LeaseOut)
 async def get_lease(lease_id: UUID, repo: LeaseRepo = Depends(get_lease_repo)):
+    lease = await repo.get(lease_id)
+    if not lease:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Lease not found",
+        )
+    return lease
+
+
+@router.get("/{lease_id}/progress", response_model=LeaseProgressOut)
+async def get_lease_progress(lease_id: UUID, repo: LeaseRepo = Depends(get_lease_repo)):
     lease = await repo.get(lease_id)
     if not lease:
         raise HTTPException(
