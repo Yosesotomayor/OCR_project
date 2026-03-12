@@ -135,8 +135,13 @@ export default function ChatContainer({
   const [input, setInput] = useState('');
   const [selectedFilenames, setSelectedFilenames] = useState<string[]>([]);
   const [isFileSelectorOpen, setIsFileSelectorOpen] = useState(false);
+  const [fileSearch, setFileSearch] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const { sendMessage, leases } = useChat();
+
+  const filteredLeases = leases.filter(lease => 
+    lease.filename.toLowerCase().includes(fileSearch.toLowerCase())
+  );
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -255,17 +260,30 @@ export default function ChatContainer({
                   <span className="text-xs font-bold text-gray-200">Filtrar por archivos ({selectedFilenames.length})</span>
                 </div>
                 <button 
-                  onClick={() => setIsFileSelectorOpen(false)}
+                  onClick={() => { setIsFileSelectorOpen(false); setFileSearch(''); }}
                   className="p-1 hover:bg-white/10 rounded-lg transition-all"
                 >
                   <X size={16} className="text-gray-400" />
                 </button>
               </div>
+              
+              <div className="px-4 py-2 border-b border-white/5 bg-white/1">
+                <input
+                  type="text"
+                  placeholder="Buscar archivo..."
+                  value={fileSearch}
+                  onChange={(e) => setFileSearch(e.target.value)}
+                  className="w-full bg-transparent border-none focus:ring-0 focus:outline-none text-[11px] text-gray-300 py-1"
+                />
+              </div>
+
               <div className="overflow-y-auto p-2 space-y-1 scrollbar-hide">
-                {leases.length === 0 ? (
-                  <p className="text-[10px] text-gray-500 text-center py-4">No hay documentos disponibles</p>
+                {filteredLeases.length === 0 ? (
+                  <p className="text-[10px] text-gray-500 text-center py-4">
+                    {fileSearch ? "No se encontraron resultados" : "No hay documentos disponibles"}
+                  </p>
                 ) : (
-                  leases.map((lease) => (
+                  filteredLeases.map((lease) => (
                     <button
                       key={lease.id}
                       onClick={() => toggleFile(lease.filename)}
