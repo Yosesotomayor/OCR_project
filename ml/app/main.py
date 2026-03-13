@@ -5,7 +5,7 @@ from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer, CrossEncoder
-
+from paddleocr import PaddleOCR
 from app.core.config import settings
 from app.infrastructure.llm import OllamaClient
 from app.api.deps import validate_auth
@@ -32,6 +32,10 @@ async def lifespan(app: FastAPI):
     if settings.reranker_enabled:
         app.state.reranker = CrossEncoder(settings.reranker_model)
 
+    app.state.paddle_ocr = PaddleOCR(
+        lang="es",
+        use_angle_cls=True,
+    )
     logger.info("Startup complete")
 
     yield

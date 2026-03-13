@@ -14,8 +14,8 @@ def get_embedding_model(request: Request) -> SentenceTransformer:
 def get_reranker(request: Request) -> CrossEncoder | None:
     return request.app.state.reranker
 
-def get_ocr_engine() -> OCREngine:
-    return OCREngine()
+def get_ocr_engine(request: Request) -> OCREngine:
+    return OCREngine(request.app.state.paddle_ocr)
 
 # Authentication
 
